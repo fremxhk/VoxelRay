@@ -3,17 +3,18 @@ import Metal
 import QuartzCore
 import Combine
 
-/// Core renderer coordinating triple-buffered uniforms, offscreen safe blit readbacks, and HUD telemetry.
+/// Core renderer coordinating VoxelWorld state, triple-buffered uniforms, and dual Device/Simulator ray-tracing pipelines.
 public final class Renderer: ObservableObject {
     public static let maxFramesInFlight = 3
     public static let uniformStride = MemoryLayout<FrameUniforms>.stride
 
     public let device: MTLDevice
-    public let commandQueue: MTLCommandQueue
     public let camera: Camera
+    public let world: VoxelWorld
 
     @Published public var fps: Double = 60.0
     @Published public var sampleCount: UInt32 = 0
+    @Published public var activeBiome: VoxelBiome = .sunlitCourtyard
     @Published public var thermalBadgeText: String = {
         #if targetEnvironment(simulator)
         return "MetalFX (Device Only)"
@@ -21,7 +22,7 @@ public final class Renderer: ObservableObject {
         return "MetalFX · 75%"
         #endif
     }()
-    @Published public var sunElevation: Float = 0.72 {
+    @Published public var sunElevation: Float = VoxelBiome.sunlitCourtyard.defaultSunElevation {
         didSet {
             if abs(oldValue - sunElevation) > 1e-4 {
                 camera.resetAccumulation()
@@ -39,48 +40,57 @@ public final class Renderer: ObservableObject {
     private var lastFrameTime: CFTimeInterval = CACurrentMediaTime()
     private var smoothedFPS: Double = 60.0
 
-    private let smokePipeline: MTLComputePipelineState
     private var displayTexture: MTLTexture?
     private var displayTextureSize: (Int, Int) = (0, 0)
+
+    #if targetEnvironment(simulator)
+    private let simPipeline: SimulatorComputePipeline
+    #else
+    private let devicePipeline: Metal4DevicePipeline?
+    private let fallbackQueue: MTLCommandQueue
+    private let fallbackSmokePipeline: MTLComputePipelineState
+    #endif
 
     public init?(device: MTLDevice? = MTLCreateSystemDefaultDevice()) {
         guard let dev = device else {
             NSLog("VoxelRay Renderer init failed: MTLCreateSystemDefaultDevice() returned nil")
             return nil
         }
-        guard let queue = dev.makeCommandQueue() else {
-            NSLog("VoxelRay Renderer init failed: makeCommandQueue() returned nil")
-            return nil
-        }
         guard let library = dev.makeDefaultLibrary() else {
             NSLog("VoxelRay Renderer init failed: makeDefaultLibrary() returned nil")
-            return nil
-        }
-        guard let smokeFn = library.makeFunction(name: "rayDirSmokeKernel") else {
-            NSLog("VoxelRay Renderer init failed: rayDirSmokeKernel not found")
-            return nil
-        }
-        let pipeline: MTLComputePipelineState
-        do {
-            pipeline = try dev.makeComputePipelineState(function: smokeFn)
-        } catch {
-            NSLog("VoxelRay Renderer init failed: makeComputePipelineState error: \(error)")
             return nil
         }
         guard let ring = dev.makeBuffer(
             length: Self.uniformStride * Self.maxFramesInFlight,
             options: .storageModeShared
         ) else {
-            NSLog("VoxelRay Renderer init failed: makeBuffer for uniforms returned nil")
+            NSLog("VoxelRay Renderer init failed: uniform ring allocation failed")
             return nil
         }
+        ring.label = "FrameUniformsRing"
+
+        #if targetEnvironment(simulator)
+        guard let sim = SimulatorComputePipeline(device: dev, library: library) else {
+            return nil
+        }
+        self.simPipeline = sim
+        #else
+        guard let q = dev.makeCommandQueue(),
+              let smokeFn = library.makeFunction(name: "rayDirSmokeKernel"),
+              let smokePSO = try? dev.makeComputePipelineState(function: smokeFn)
+        else {
+            return nil
+        }
+        self.fallbackQueue = q
+        self.fallbackSmokePipeline = smokePSO
+        self.devicePipeline = Metal4DevicePipeline(device: dev, library: library, uniformRingBuffer: ring)
+        #endif
 
         self.device = dev
-        self.commandQueue = queue
         self.camera = Camera()
-        self.smokePipeline = pipeline
+        self.world = VoxelWorld(biome: .sunlitCourtyard)
         self.uniformRingBuffer = ring
-        self.uniformRingBuffer.label = "FrameUniformsRing"
+        applyDefaultPose(for: .sunlitCourtyard)
     }
 
     /// Dispatches uniform-sized 2D threadgroups so Simulator and all iOS GPUs execute cleanly under MTL_DEBUG_LAYER=1.
@@ -100,6 +110,24 @@ public final class Renderer: ObservableObject {
             depth: 1
         )
         encoder.dispatchThreadgroups(tgCount, threadsPerThreadgroup: tgSize)
+    }
+
+    public func applyDefaultPose(for biome: VoxelBiome) {
+        let pose = VoxelWorld.defaultCameraPose(for: biome)
+        camera.lookAt(eye: pose.eye, target: pose.target)
+        sunElevation = biome.defaultSunElevation
+    }
+
+    public func selectBiome(_ biome: VoxelBiome) {
+        world.generate(biome: biome)
+        activeBiome = biome
+        applyDefaultPose(for: biome)
+        camera.resetAccumulation()
+    }
+
+    public func resetWorld() {
+        world.generate(biome: activeBiome)
+        camera.resetAccumulation()
     }
 
     private func ensurePrivateTexture(
@@ -148,7 +176,7 @@ public final class Renderer: ObservableObject {
             outputWidth: outputWidth,
             outputHeight: outputHeight,
             sunElevation: sunElevation,
-            biomeRawValue: 0,
+            biomeRawValue: world.biome.rawValue,
             maxBounces: 3,
             renderMode: 0,
             flags: 0,
@@ -184,8 +212,7 @@ public final class Renderer: ObservableObject {
                 pixelFormat: layer.pixelFormat,
                 usage: [.shaderWrite, .shaderRead],
                 label: "PrivateDisplayTarget"
-              ),
-              let commandBuffer = commandQueue.makeCommandBuffer()
+              )
         else {
             frameSemaphore.signal()
             return
@@ -202,37 +229,50 @@ public final class Renderer: ObservableObject {
             timeSec: Float(now - startTime)
         )
 
-            if let encoder = commandBuffer.makeComputeCommandEncoder() {
-                encoder.label = "ComputeSmokePass"
-                encoder.setComputePipelineState(smokePipeline)
-                encoder.setTexture(targetTex, index: 0)
-                encoder.setBuffer(uniformRingBuffer, offset: uniformOffset, index: 0)
-                Self.dispatch2D(encoder: encoder, pipeline: smokePipeline, width: width, height: height)
-                encoder.endEncoding()
-            }
-
-        if let blit = commandBuffer.makeBlitCommandEncoder() {
-            blit.label = "PresentBlitCopy"
-            blit.copy(
-                from: targetTex,
-                sourceSlice: 0,
-                sourceLevel: 0,
-                sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
-                sourceSize: MTLSize(width: width, height: height, depth: 1),
-                to: drawable.texture,
-                destinationSlice: 0,
-                destinationLevel: 0,
-                destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0)
+        #if targetEnvironment(simulator)
+        simPipeline.encodeDisplayFrame(
+            world: world,
+            uniformRingBuffer: uniformRingBuffer,
+            uniformOffset: uniformOffset,
+            drawable: drawable,
+            displayTarget: targetTex,
+            width: width,
+            height: height,
+            frameSemaphore: frameSemaphore
+        )
+        #else
+        if let devicePipeline = devicePipeline {
+            devicePipeline.encodeDisplayFrame(
+                world: world,
+                uniformRingBuffer: uniformRingBuffer,
+                uniformOffset: uniformOffset,
+                slot: slot,
+                drawable: drawable,
+                displayTarget: targetTex,
+                width: width,
+                height: height,
+                frameSemaphore: frameSemaphore
             )
-            blit.endEncoding()
+        } else if let cmdBuf = fallbackQueue.makeCommandBuffer() {
+            if let enc = cmdBuf.makeComputeCommandEncoder() {
+                enc.setComputePipelineState(fallbackSmokePipeline)
+                enc.setTexture(targetTex, index: 0)
+                enc.setBuffer(uniformRingBuffer, offset: uniformOffset, index: 0)
+                Self.dispatch2D(encoder: enc, pipeline: fallbackSmokePipeline, width: width, height: height)
+                enc.endEncoding()
+            }
+            if let blit = cmdBuf.makeBlitCommandEncoder() {
+                blit.copy(from: targetTex, sourceSlice: 0, sourceLevel: 0, sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0), sourceSize: MTLSize(width: width, height: height, depth: 1), to: drawable.texture, destinationSlice: 0, destinationLevel: 0, destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0))
+                blit.endEncoding()
+            }
+            let sem = frameSemaphore
+            cmdBuf.addCompletedHandler { _ in sem.signal() }
+            cmdBuf.present(drawable)
+            cmdBuf.commit()
+        } else {
+            frameSemaphore.signal()
         }
-
-        let sem = frameSemaphore
-        commandBuffer.addCompletedHandler { _ in
-            sem.signal()
-        }
-        commandBuffer.present(drawable)
-        commandBuffer.commit()
+        #endif
 
         camera.advanceFrame()
         let currentSample = camera.frameIndex
@@ -243,84 +283,67 @@ public final class Renderer: ObservableObject {
         }
     }
 
-    /// Renders an offscreen RGBA8 image using a .private texture and explicit MTLBlitCommandEncoder staging readback.
-    public func renderOffscreen(width: Int, height: Int, samples: Int = 1) -> [UInt8] {
+    /// Renders an offscreen RGBA8 image using a .private texture and explicit staging readback.
+    public func renderOffscreen(
+        width: Int,
+        height: Int,
+        samples: Int = 1,
+        biome: VoxelBiome? = nil,
+        smokeOnly: Bool = false
+    ) -> [UInt8] {
         precondition(width > 0 && height > 0)
-        let bytesPerRow = width * 4
-        let totalBytes = bytesPerRow * height
-
-        let desc = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .rgba8Unorm,
-            width: width,
-            height: height,
-            mipmapped: false
-        )
-        desc.storageMode = .private
-        desc.usage = [.shaderWrite, .shaderRead]
-
-        guard let privateTarget = device.makeTexture(descriptor: desc),
-              let stagingBuffer = device.makeBuffer(length: totalBytes, options: .storageModeShared)
-        else {
-            return []
+        if let biome = biome {
+            selectBiome(biome)
         }
-        privateTarget.label = "OffscreenPrivateTarget"
-        stagingBuffer.label = "OffscreenReadbackStaging"
-
         camera.updateAspect(Float(width) / Float(height))
-        let count = max(1, samples)
+        camera.resetAccumulation()
 
-        for s in 0..<count {
-            frameSemaphore.wait()
-            guard let commandBuffer = commandQueue.makeCommandBuffer() else {
-                frameSemaphore.signal()
-                return []
-            }
-            let slot = ringIndex
-            ringIndex = (ringIndex + 1) % Self.maxFramesInFlight
-            let uniformOffset = writeUniforms(
+        let offsetProvider: (Int) -> Int = { [weak self] sampleIdx in
+            guard let self = self else { return 0 }
+            let slot = self.ringIndex
+            self.ringIndex = (self.ringIndex + 1) % Self.maxFramesInFlight
+            let off = self.writeUniforms(
                 slot: slot,
                 internalWidth: width,
                 internalHeight: height,
                 outputWidth: width,
                 outputHeight: height,
-                timeSec: Float(s) * (1.0 / 60.0)
+                timeSec: Float(sampleIdx) * (1.0 / 60.0)
             )
-
-            if let encoder = commandBuffer.makeComputeCommandEncoder() {
-                encoder.setComputePipelineState(smokePipeline)
-                encoder.setTexture(privateTarget, index: 0)
-                encoder.setBuffer(uniformRingBuffer, offset: uniformOffset, index: 0)
-                Self.dispatch2D(encoder: encoder, pipeline: smokePipeline, width: width, height: height)
-                encoder.endEncoding()
-            }
-
-            if s == count - 1, let blit = commandBuffer.makeBlitCommandEncoder() {
-                blit.copy(
-                    from: privateTarget,
-                    sourceSlice: 0,
-                    sourceLevel: 0,
-                    sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
-                    sourceSize: MTLSize(width: width, height: height, depth: 1),
-                    to: stagingBuffer,
-                    destinationOffset: 0,
-                    destinationBytesPerRow: bytesPerRow,
-                    destinationBytesPerImage: totalBytes
-                )
-                blit.endEncoding()
-            }
-
-            let sem = frameSemaphore
-            commandBuffer.addCompletedHandler { _ in
-                sem.signal()
-            }
-            commandBuffer.commit()
-            if s == count - 1 {
-                commandBuffer.waitUntilCompleted()
-            }
-            camera.advanceFrame()
+            self.camera.advanceFrame()
+            return off
         }
 
-        let ptr = stagingBuffer.contents().assumingMemoryBound(to: UInt8.self)
-        return Array(UnsafeBufferPointer(start: ptr, count: totalBytes))
+        #if targetEnvironment(simulator)
+        return simPipeline.renderOffscreen(
+            world: world,
+            uniformRingBuffer: uniformRingBuffer,
+            uniformOffsetProvider: offsetProvider,
+            width: width,
+            height: height,
+            samples: samples,
+            smokeOnly: smokeOnly,
+            frameSemaphore: frameSemaphore
+        )
+        #else
+        if let devicePipeline = devicePipeline, !smokeOnly {
+            return devicePipeline.renderOffscreen(
+                world: world,
+                uniformRingBuffer: uniformRingBuffer,
+                uniformOffsetProvider: offsetProvider,
+                width: width,
+                height: height,
+                samples: samples
+            )
+        }
+        return []
+        #endif
     }
+
+    #if targetEnvironment(simulator)
+    /// Runs GPU DDA raycast parity check for tests.
+    public func gpuRaycastParity(rays: [(origin: SIMD3<Float>, direction: SIMD3<Float>)]) -> [RayParityResult] {
+        simPipeline.raycastParity(world: world, rays: rays)
+    }
+    #endif
 }

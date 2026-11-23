@@ -28,6 +28,17 @@ typedef struct {
     simd_float4 extra2;             // reserved
 } FrameUniforms;
 
+typedef struct {
+    simd_float4 origin;    // xyz
+    simd_float4 direction; // xyz
+} RayParityQuery;
+
+typedef struct {
+    simd_int4   voxelAndHit;    // x,y,z = coord, w = hit (1/0)
+    simd_float4 normalAndDist;  // xyz = normal, w = distance
+    simd_uint4  materialAndPad; // x = materialId
+} RayParityResult;
+
 #ifndef __METAL_VERSION__
 _Static_assert(sizeof(FrameUniforms) == 256, "FrameUniforms must be 256 bytes");
 #endif
