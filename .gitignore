@@ -1,0 +1,27 @@
+# Secrets & Local Env
+.env
+.env.*
+*.p8
+*.cer
+*.p12
+*.mobileprovision
+*.provisionprofile
+
+# Build & CI Artifacts
+artifacts/
+build/
+DerivedData/
+*.xcarchive
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.xcresult
+
+# Xcode User Data & OS Files
+*.xcuserdatad/
+*.xcuserdata
+VoxelRay.xcodeproj/xcuserdata/
+VoxelRay.xcodeproj/project.xcworkspace/xcuserdata/
+.DS_Store
+*.swp
+*~

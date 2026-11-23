@@ -1,0 +1,100 @@
+name: VoxelRay
+options:
+  bundleIdPrefix: com.voxelray
+  deploymentTarget:
+    iOS: "26.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+  defaultConfig: Debug
+
+settings:
+  base:
+    DEVELOPMENT_TEAM: 3ZHSMUKPN8
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    SUPPORTS_MACCATALYST: NO
+    SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+
+targets:
+  VoxelRay:
+    type: application
+    platform: iOS
+    sources:
+      - path: VoxelRay
+        excludes:
+          - "**/*.md"
+    info:
+      path: VoxelRay/Resources/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.voxelray.app
+        INFOPLIST_FILE: VoxelRay/Resources/Info.plist
+        SWIFT_OBJC_BRIDGING_HEADER: VoxelRay/Engine/ShaderTypes.h
+        MTL_HEADER_SEARCH_PATHS: "$(SRCROOT)/VoxelRay/Engine $(SRCROOT)/VoxelRay/Shaders"
+        "MTL_PREPROCESSOR_DEFINITIONS[sdk=iphonesimulator*]": "__METAL_IOS_SIMULATOR__=1"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_BITCODE: NO
+    dependencies:
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+      - sdk: StoreKit.framework
+      - sdk: QuartzCore.framework
+
+  VoxelRayTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: VoxelRayTests
+    dependencies:
+      - target: VoxelRay
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.voxelray.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/VoxelRay.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VoxelRay"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+  VoxelRayUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: VoxelRayUITests
+    dependencies:
+      - target: VoxelRay
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.voxelray.app.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: VoxelRay
+        CODE_SIGN_STYLE: Automatic
+
+schemes:
+  VoxelRay:
+    build:
+      targets:
+        VoxelRay: all
+        VoxelRayTests: [test]
+        VoxelRayUITests: [test]
+    run:
+      config: Debug
+      environmentVariables:
+        MTL_DEBUG_LAYER: "1"
+    test:
+      config: Debug
+      gatherCoverageData: false
+      environmentVariables:
+        MTL_DEBUG_LAYER: "1"
+      targets:
+        - name: VoxelRayTests
+        - name: VoxelRayUITests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
