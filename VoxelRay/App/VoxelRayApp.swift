@@ -4,7 +4,7 @@ import SwiftUI
 struct VoxelRayApp: App {
     var body: some Scene {
         WindowGroup {
-            Text("VoxelRay")
+            ContentView()
         }
     }
 }

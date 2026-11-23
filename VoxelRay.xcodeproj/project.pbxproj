@@ -9,13 +9,20 @@
 /* Begin PBXBuildFile section */
 		046DD4F36C90F8773C40D9B5 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F80152C5B2E83F03BB62F52C /* MetalKit.framework */; };
 		0A3D8C00D15763A11A4ABA57 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7285CAA3838DC0A4CCE20746 /* QuartzCore.framework */; };
-		125BD46D01649B24D6F903B6 /* VoxelRayTestsPlaceholder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6085B516A732B82DE8E01E5C /* VoxelRayTestsPlaceholder.swift */; };
+		18ACFF12CEBCB4AAB6ABA749 /* SimulatorFallback.metal in Sources */ = {isa = PBXBuildFile; fileRef = 0AC0E4A287D0383D5679C008 /* SimulatorFallback.metal */; };
+		2D26AADFD771020801CA87B3 /* CameraTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0699F5A64113EE0F642C0FF /* CameraTests.swift */; };
+		442131F63CCEFD56BE20E660 /* HUDView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED74A93A7F79E0EFCBD23CB7 /* HUDView.swift */; };
+		47E612C5869CE5C59A3489C6 /* MetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F87755C72C3B8419FC3499A1 /* MetalView.swift */; };
+		5C0C2549AA39137BC03423DD /* Renderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A3FFF8A99FEB04D0E055678 /* Renderer.swift */; };
+		767E02CAD4A59DD8D2E3DBBF /* VoxelRayUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B48A831D424C489D524BFD6A /* VoxelRayUITests.swift */; };
 		923A6FF160A7CC6823273FB5 /* StoreConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06228E18D309571C84913F39 /* StoreConfig.swift */; };
 		9794E5C0D55F0E6D7EEA26B7 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 73CCEC5D5E9ED976160F2E30 /* Metal.framework */; };
+		C0BE05538F5DACBA3D8D971F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD755994C3196D5926F7D724 /* ContentView.swift */; };
+		C7DBF446027C2C6AB0495C6C /* RendererSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79C601A8984477F07AD1DC54 /* RendererSmokeTests.swift */; };
 		CFC0D98F31C3DCC04980B136 /* VoxelRayApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1907CEBEA8FB089A9762400E /* VoxelRayApp.swift */; };
 		D043800833803DDCB5166C36 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C0FB07E2A7BD494F34349A77 /* StoreKit.framework */; };
-		EDE8D41F4CAB3D2003ED11D0 /* VoxelRayUITestsPlaceholder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F0FFDA9CBC79144204E3F48 /* VoxelRayUITestsPlaceholder.swift */; };
 		F56FFF10AAEA211A81823F7B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B76BD1EC29BB8A6B00038A16 /* Assets.xcassets */; };
+		FF7649C53DE95A657D791394 /* Camera.swift in Sources */ = {isa = PBXBuildFile; fileRef = E27FDCBD7BF7F4EFB362E428 /* Camera.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -38,17 +45,25 @@
 /* Begin PBXFileReference section */
 		04782D75935A85F54C776CCA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		06228E18D309571C84913F39 /* StoreConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreConfig.swift; sourceTree = "<group>"; };
+		0AC0E4A287D0383D5679C008 /* SimulatorFallback.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = SimulatorFallback.metal; sourceTree = "<group>"; };
 		1907CEBEA8FB089A9762400E /* VoxelRayApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxelRayApp.swift; sourceTree = "<group>"; };
-		2F0FFDA9CBC79144204E3F48 /* VoxelRayUITestsPlaceholder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxelRayUITestsPlaceholder.swift; sourceTree = "<group>"; };
+		2A3FFF8A99FEB04D0E055678 /* Renderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Renderer.swift; sourceTree = "<group>"; };
 		54473A7AEB8BA18357A1AF53 /* ShaderTypes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShaderTypes.h; sourceTree = "<group>"; };
-		6085B516A732B82DE8E01E5C /* VoxelRayTestsPlaceholder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxelRayTestsPlaceholder.swift; sourceTree = "<group>"; };
+		588BDB0D8E70438F494BDD2E /* VoxelCommon.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = VoxelCommon.h; sourceTree = "<group>"; };
 		680E1B1A62DD96C68A35C7BC /* VoxelRayUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VoxelRayUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7285CAA3838DC0A4CCE20746 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		73CCEC5D5E9ED976160F2E30 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		79C601A8984477F07AD1DC54 /* RendererSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RendererSmokeTests.swift; sourceTree = "<group>"; };
+		B48A831D424C489D524BFD6A /* VoxelRayUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxelRayUITests.swift; sourceTree = "<group>"; };
 		B76BD1EC29BB8A6B00038A16 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C0699F5A64113EE0F642C0FF /* CameraTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraTests.swift; sourceTree = "<group>"; };
 		C0FB07E2A7BD494F34349A77 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
+		E27FDCBD7BF7F4EFB362E428 /* Camera.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Camera.swift; sourceTree = "<group>"; };
 		EA42DD20ED4AF79C661A3963 /* VoxelRayTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VoxelRayTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		ED74A93A7F79E0EFCBD23CB7 /* HUDView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HUDView.swift; sourceTree = "<group>"; };
 		F80152C5B2E83F03BB62F52C /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		F87755C72C3B8419FC3499A1 /* MetalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalView.swift; sourceTree = "<group>"; };
+		FD755994C3196D5926F7D724 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		FF834C44E4A5271662656E1F /* VoxelRay.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VoxelRay.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -89,6 +104,9 @@
 		393513A0F28BFE4F5AB245A4 /* Engine */ = {
 			isa = PBXGroup;
 			children = (
+				E27FDCBD7BF7F4EFB362E428 /* Camera.swift */,
+				F87755C72C3B8419FC3499A1 /* MetalView.swift */,
+				2A3FFF8A99FEB04D0E055678 /* Renderer.swift */,
 				54473A7AEB8BA18357A1AF53 /* ShaderTypes.h */,
 			);
 			path = Engine;
@@ -97,7 +115,7 @@
 		4E935CFD1FB24468AB3258ED /* VoxelRayUITests */ = {
 			isa = PBXGroup;
 			children = (
-				2F0FFDA9CBC79144204E3F48 /* VoxelRayUITestsPlaceholder.swift */,
+				B48A831D424C489D524BFD6A /* VoxelRayUITests.swift */,
 			);
 			path = VoxelRayUITests;
 			sourceTree = "<group>";
@@ -111,6 +129,14 @@
 				C0FB07E2A7BD494F34349A77 /* StoreKit.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		784BAFC0197006161649B7EE /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				ED74A93A7F79E0EFCBD23CB7 /* HUDView.swift */,
+			);
+			path = UI;
 			sourceTree = "<group>";
 		};
 		7BC1D546581468CD030E8BA6 /* Resources */ = {
@@ -128,7 +154,9 @@
 				E770B09E14E8BD39357E0D32 /* App */,
 				393513A0F28BFE4F5AB245A4 /* Engine */,
 				7BC1D546581468CD030E8BA6 /* Resources */,
+				E875E4F56FA551F67A5B12E5 /* Shaders */,
 				2ABD25B21890E8809D2EE0C1 /* Store */,
+				784BAFC0197006161649B7EE /* UI */,
 			);
 			path = VoxelRay;
 			sourceTree = "<group>";
@@ -146,7 +174,8 @@
 		D63CD364A2B53E5BBCE53EFE /* VoxelRayTests */ = {
 			isa = PBXGroup;
 			children = (
-				6085B516A732B82DE8E01E5C /* VoxelRayTestsPlaceholder.swift */,
+				C0699F5A64113EE0F642C0FF /* CameraTests.swift */,
+				79C601A8984477F07AD1DC54 /* RendererSmokeTests.swift */,
 			);
 			path = VoxelRayTests;
 			sourceTree = "<group>";
@@ -154,9 +183,19 @@
 		E770B09E14E8BD39357E0D32 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				FD755994C3196D5926F7D724 /* ContentView.swift */,
 				1907CEBEA8FB089A9762400E /* VoxelRayApp.swift */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		E875E4F56FA551F67A5B12E5 /* Shaders */ = {
+			isa = PBXGroup;
+			children = (
+				0AC0E4A287D0383D5679C008 /* SimulatorFallback.metal */,
+				588BDB0D8E70438F494BDD2E /* VoxelCommon.h */,
+			);
+			path = Shaders;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -277,7 +316,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				EDE8D41F4CAB3D2003ED11D0 /* VoxelRayUITestsPlaceholder.swift in Sources */,
+				767E02CAD4A59DD8D2E3DBBF /* VoxelRayUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -285,6 +324,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FF7649C53DE95A657D791394 /* Camera.swift in Sources */,
+				C0BE05538F5DACBA3D8D971F /* ContentView.swift in Sources */,
+				442131F63CCEFD56BE20E660 /* HUDView.swift in Sources */,
+				47E612C5869CE5C59A3489C6 /* MetalView.swift in Sources */,
+				5C0C2549AA39137BC03423DD /* Renderer.swift in Sources */,
+				18ACFF12CEBCB4AAB6ABA749 /* SimulatorFallback.metal in Sources */,
 				923A6FF160A7CC6823273FB5 /* StoreConfig.swift in Sources */,
 				CFC0D98F31C3DCC04980B136 /* VoxelRayApp.swift in Sources */,
 			);
@@ -294,7 +339,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				125BD46D01649B24D6F903B6 /* VoxelRayTestsPlaceholder.swift in Sources */,
+				2D26AADFD771020801CA87B3 /* CameraTests.swift in Sources */,
+				C7DBF446027C2C6AB0495C6C /* RendererSmokeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -317,15 +363,31 @@
 		0E11362BD7A3D4B85BF97BE6 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 3ZHSMUKPN8;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -336,6 +398,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.voxelray.app.tests;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VoxelRay.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VoxelRay";
 			};
@@ -346,6 +409,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.voxelray.app.uitests;
 				TEST_TARGET_NAME = VoxelRay;
 			};
@@ -356,6 +420,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.voxelray.app.tests;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VoxelRay.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VoxelRay";
 			};
@@ -390,17 +455,33 @@
 		E6F95525849BDD2EC54B503B /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 3ZHSMUKPN8;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_OPTIMIZATION_LEVEL = s;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
@@ -409,6 +490,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.voxelray.app.uitests;
 				TEST_TARGET_NAME = VoxelRay;
 			};
