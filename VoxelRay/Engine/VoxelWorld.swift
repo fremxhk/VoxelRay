@@ -129,7 +129,7 @@ public final class VoxelWorld {
         case .sunlitCourtyard:
             return (SIMD3<Float>(46.5, 17.5, 47.5), SIMD3<Float>(28.0, 6.0, 28.0))
         case .neonCavern:
-            return (SIMD3<Float>(48.5, 11.5, 48.5), SIMD3<Float>(28.5, 6.5, 28.5))
+            return (SIMD3<Float>(38.5, 11.0, 48.0), SIMD3<Float>(29.5, 7.0, 26.0))
         case .glassCathedral:
             return (SIMD3<Float>(40.5, 11.5, 53.5), SIMD3<Float>(30.5, 9.5, 20.0))
         }

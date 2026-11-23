@@ -84,6 +84,8 @@ public struct HUDView: View {
                                 }
                                 Text(biome.shortTitle)
                                     .font(.system(.caption, design: .rounded).weight(.semibold))
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
                             }
                             .foregroundStyle(selected ? .black : .white)
                             .padding(.horizontal, 10)
@@ -97,22 +99,20 @@ public struct HUDView: View {
                     }
                 }
 
-                if !isProUnlocked {
-                    Button {
-                        onOpenPaywall()
-                    } label: {
-                        Label("Pro", systemImage: "sparkles")
-                            .font(.system(.caption, design: .rounded).weight(.bold))
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(
-                                LinearGradient(colors: [.yellow, .orange], startPoint: .topLeading, endPoint: .bottomTrailing),
-                                in: Capsule()
-                            )
-                    }
-                    .accessibilityIdentifier("hud.button.pro")
+                Button {
+                    onOpenPaywall()
+                } label: {
+                    Label(isProUnlocked ? "Studio" : "Pro", systemImage: "sparkles")
+                        .font(.system(.caption, design: .rounded).weight(.bold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            LinearGradient(colors: [.yellow, .orange], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: Capsule()
+                        )
                 }
+                .accessibilityIdentifier("hud.button.pro")
 
                 Button {
                     renderer.enterPhotoMode(isProUnlocked: isProUnlocked)

@@ -1,0 +1,55 @@
+{
+  "identifier" : "7E3C9A21-6D14-4C9B-B144-8E94A01C3F99",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : true,
+      "internalID" : "6740000001",
+      "localizations" : [
+        {
+          "description" : "Unlock Neon Cavern and Glass Cathedral biomes plus watermark-free 4K Photo Mode exports.",
+          "displayName" : "Architect Pro",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.voxelray.app.pro",
+      "referenceName" : "Architect Pro",
+      "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "1.99",
+      "familyShareable" : true,
+      "internalID" : "6740000002",
+      "localizations" : [
+        {
+          "description" : "Unlock the refractive Prism Crystal voxel brush and iridescent accents.",
+          "displayName" : "Prism Material Pack",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.voxelray.app.materials.crystal",
+      "referenceName" : "Prism Material Pack",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "6740000000",
+    "_developerTeamID" : "3ZHSMUKPN8",
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

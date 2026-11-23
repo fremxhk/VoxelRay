@@ -55,6 +55,7 @@ targets:
       - path: VoxelRay
         excludes:
           - "**/*.md"
+          - "**/*.storekit"
     info:
       path: VoxelRay/Resources/Info.plist
     settings:
@@ -77,6 +78,8 @@ targets:
     platform: iOS
     sources:
       - path: VoxelRayTests
+      - path: VoxelRay/Resources/VoxelRay.storekit
+        buildPhase: resources
     dependencies:
       - target: VoxelRay
     settings:
@@ -85,6 +88,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/VoxelRay.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VoxelRay"
         BUNDLE_LOADER: "$(TEST_HOST)"
+        ENABLE_TESTING_SEARCH_PATHS: YES
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @loader_path/Frameworks"
 
   VoxelRayUITests:
@@ -111,11 +115,13 @@ schemes:
         VoxelRayUITests: [test]
     run:
       config: Debug
+      storeKitConfiguration: VoxelRay/Resources/VoxelRay.storekit
       environmentVariables:
         MTL_DEBUG_LAYER: "1"
     test:
       config: Debug
       gatherCoverageData: false
+      storeKitConfiguration: VoxelRay/Resources/VoxelRay.storekit
       environmentVariables:
         MTL_DEBUG_LAYER: "1"
       targets:
