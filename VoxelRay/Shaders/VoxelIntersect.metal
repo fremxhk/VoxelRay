@@ -203,7 +203,7 @@ kernel void metal4PathTraceKernel(
         VoxelRayPayload payload;
         auto hit = rt.intersect(r, accel, ift, payload);
         if (hit.type == intersection_type::none) {
-            radiance += throughput * evaluateSkyColor(rayDir, sunDir, biomeId);
+            radiance += throughput * evaluateNishitaSky(rayDir, sunDir, biomeId);
             break;
         }
 

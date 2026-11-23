@@ -2,18 +2,42 @@
 import Foundation
 import Metal
 import QuartzCore
+#if canImport(MetalFX)
+import MetalFX
+#endif
 
-/// Physical-device Metal 4 pipeline using MTL4CommandQueue, MTL4Compiler, MTLResidencySet,
-/// MTL4AccelerationStructureBoundingBoxGeometryDescriptor, and MTLIntersectionFunctionTable.
+/// Physical-device Metal 4 pipeline with hardware BVH AABB traversal, residency sets,
+/// and thermally adaptive MetalFX Temporal Upscaling.
 final class Metal4DevicePipeline {
+    struct ThermalConfig {
+        let scale: Float
+        let maxBounces: UInt32
+        let badge: String
+    }
+
+    static func thermalConfig(for state: ProcessInfo.ThermalState) -> ThermalConfig {
+        switch state {
+        case .nominal, .fair:
+            return ThermalConfig(scale: 0.75, maxBounces: 3, badge: "MetalFX · 75%")
+        case .serious:
+            return ThermalConfig(scale: 0.58, maxBounces: 2, badge: "MetalFX · 58% (Warm)")
+        case .critical:
+            return ThermalConfig(scale: 0.50, maxBounces: 1, badge: "MetalFX · 50% (Thermal)")
+        @unknown default:
+            return ThermalConfig(scale: 0.75, maxBounces: 3, badge: "MetalFX · 75%")
+        }
+    }
+
     let device: MTLDevice
     let commandQueue: MTL4CommandQueue
     let compiler: MTL4Compiler
     let rtPipeline: MTLComputePipelineState
+    let tonemapPipeline: MTLComputePipelineState
     let intersectionTable: MTLIntersectionFunctionTable
     let accelerationStructure: MTLAccelerationStructure
     let residencySet: MTLResidencySet
     let argumentTable: MTL4ArgumentTable
+    let tonemapArgTable: MTL4ArgumentTable
 
     private let allocators: [MTL4CommandAllocator]
     private let commandBuffer: MTL4CommandBuffer
@@ -34,7 +58,14 @@ final class Metal4DevicePipeline {
     private var colorTexture: MTLTexture?
     private var depthTexture: MTLTexture?
     private var motionTexture: MTLTexture?
-    private var textureSize: (Int, Int) = (0, 0)
+    private var upscaledColorTexture: MTLTexture?
+    private var internalTextureSize: (Int, Int) = (0, 0)
+    private var outputTextureSize: (Int, Int) = (0, 0)
+    private var scalerNeedsReset = true
+
+    #if canImport(MetalFX)
+    private var temporalScaler: MTL4FXTemporalScaler?
+    #endif
 
     init?(device: MTLDevice, library: MTLLibrary, uniformRingBuffer: MTLBuffer) {
         guard device.supportsRaytracing,
@@ -58,6 +89,7 @@ final class Metal4DevicePipeline {
         compDesc.label = "VoxelRayMTL4Compiler"
         let mtl4Compiler: MTL4Compiler
         let rtPSO: MTLComputePipelineState
+        let tonePSO: MTLComputePipelineState
         do {
             mtl4Compiler = try device.makeCompiler(descriptor: compDesc)
 
@@ -78,6 +110,14 @@ final class Metal4DevicePipeline {
             pipeDesc.staticLinkingDescriptor = staticLink
 
             rtPSO = try mtl4Compiler.makeComputePipelineState(descriptor: pipeDesc)
+
+            let toneFnDesc = MTL4LibraryFunctionDescriptor()
+            toneFnDesc.library = library
+            toneFnDesc.name = "tonemapPresentKernel"
+            let toneDesc = MTL4ComputePipelineDescriptor()
+            toneDesc.label = "TonemapPresentPSO"
+            toneDesc.computeFunctionDescriptor = toneFnDesc
+            tonePSO = try mtl4Compiler.makeComputePipelineState(descriptor: toneDesc)
         } catch {
             NSLog("Metal4DevicePipeline compiler/PSO failed: \(error)")
             return nil
@@ -126,17 +166,24 @@ final class Metal4DevicePipeline {
 
         let resDesc = MTLResidencySetDescriptor()
         resDesc.label = "VoxelRayResidencySet"
-        resDesc.initialCapacity = 16
+        resDesc.initialCapacity = 24
         let argDesc = MTL4ArgumentTableDescriptor()
         argDesc.label = "VoxelRayArgumentTable"
         argDesc.maxBufferBindCount = 6
         argDesc.maxTextureBindCount = 8
 
+        let toneArgDesc = MTL4ArgumentTableDescriptor()
+        toneArgDesc.label = "TonemapArgumentTable"
+        toneArgDesc.maxBufferBindCount = 2
+        toneArgDesc.maxTextureBindCount = 4
+
         let resSet: MTLResidencySet
         let argTable: MTL4ArgumentTable
+        let tArgTable: MTL4ArgumentTable
         do {
             resSet = try device.makeResidencySet(descriptor: resDesc)
             argTable = try device.makeArgumentTable(descriptor: argDesc)
+            tArgTable = try device.makeArgumentTable(descriptor: toneArgDesc)
         } catch {
             NSLog("Metal4DevicePipeline residency/argTable error: \(error)")
             return nil
@@ -151,10 +198,12 @@ final class Metal4DevicePipeline {
         self.commandQueue = queue
         self.compiler = mtl4Compiler
         self.rtPipeline = rtPSO
+        self.tonemapPipeline = tonePSO
         self.intersectionTable = ift
         self.accelerationStructure = accel
         self.residencySet = resSet
         self.argumentTable = argTable
+        self.tonemapArgTable = tArgTable
         self.allocators = allocs
         self.commandBuffer = cmdBuf
         self.sharedEvent = ev
@@ -182,17 +231,26 @@ final class Metal4DevicePipeline {
         return true
     }
 
-    private func ensureTextures(width: Int, height: Int) -> Bool {
-        if textureSize.0 == width, textureSize.1 == height,
+    private func ensureTextures(
+        internalWidth: Int,
+        internalHeight: Int,
+        outputWidth: Int,
+        outputHeight: Int,
+        useMetalFX: Bool
+    ) -> Bool {
+        if internalTextureSize.0 == internalWidth, internalTextureSize.1 == internalHeight,
+           outputTextureSize.0 == outputWidth, outputTextureSize.1 == outputHeight,
            accumTextures.count == 2, colorTexture != nil, depthTexture != nil, motionTexture != nil {
-            return true
+            if !useMetalFX || upscaledColorTexture != nil {
+                return true
+            }
         }
 
-        func makePrivateTex(_ format: MTLPixelFormat, _ usage: MTLTextureUsage, _ label: String) -> MTLTexture? {
+        func makePrivateTex(_ format: MTLPixelFormat, _ w: Int, _ h: Int, _ usage: MTLTextureUsage, _ label: String) -> MTLTexture? {
             let d = MTLTextureDescriptor.texture2DDescriptor(
                 pixelFormat: format,
-                width: width,
-                height: height,
+                width: w,
+                height: h,
                 mipmapped: false
             )
             d.storageMode = .private
@@ -206,24 +264,68 @@ final class Metal4DevicePipeline {
         if let old = colorTexture { residencySet.removeAllocation(old) }
         if let old = depthTexture { residencySet.removeAllocation(old) }
         if let old = motionTexture { residencySet.removeAllocation(old) }
+        if let old = upscaledColorTexture { residencySet.removeAllocation(old) }
 
-        guard let a0 = makePrivateTex(.rgba32Float, [.shaderRead, .shaderWrite], "DevAccum_0"),
-              let a1 = makePrivateTex(.rgba32Float, [.shaderRead, .shaderWrite], "DevAccum_1"),
-              let color = makePrivateTex(.rgba16Float, [.shaderRead, .shaderWrite], "DevColorHDR"),
-              let depth = makePrivateTex(.r32Float, [.shaderRead, .shaderWrite], "DevDepth"),
-              let motion = makePrivateTex(.rg16Float, [.shaderRead, .shaderWrite], "DevMotion")
+        var colorUsage: MTLTextureUsage = [.shaderRead, .shaderWrite]
+        var depthUsage: MTLTextureUsage = [.shaderRead, .shaderWrite]
+        var motionUsage: MTLTextureUsage = [.shaderRead, .shaderWrite]
+        var outUsage: MTLTextureUsage = [.shaderRead, .shaderWrite]
+
+        #if canImport(MetalFX)
+        if useMetalFX {
+            let fxDesc = MTLFXTemporalScalerDescriptor()
+            fxDesc.colorTextureFormat = .rgba16Float
+            fxDesc.depthTextureFormat = .r32Float
+            fxDesc.motionTextureFormat = .rg16Float
+            fxDesc.outputTextureFormat = .rgba16Float
+            fxDesc.inputWidth = internalWidth
+            fxDesc.inputHeight = internalHeight
+            fxDesc.outputWidth = outputWidth
+            fxDesc.outputHeight = outputHeight
+            fxDesc.isAutoExposureEnabled = true
+            if let scaler = fxDesc.makeTemporalScaler(device: device, compiler: compiler) {
+                temporalScaler = scaler
+                colorUsage.formUnion(scaler.colorTextureUsage)
+                depthUsage.formUnion(scaler.depthTextureUsage)
+                motionUsage.formUnion(scaler.motionTextureUsage)
+                outUsage.formUnion(scaler.outputTextureUsage)
+            } else {
+                temporalScaler = nil
+            }
+        } else {
+            temporalScaler = nil
+        }
+        #endif
+
+        guard let a0 = makePrivateTex(.rgba32Float, internalWidth, internalHeight, [.shaderRead, .shaderWrite], "DevAccum_0"),
+              let a1 = makePrivateTex(.rgba32Float, internalWidth, internalHeight, [.shaderRead, .shaderWrite], "DevAccum_1"),
+              let color = makePrivateTex(.rgba16Float, internalWidth, internalHeight, colorUsage, "DevColorHDR"),
+              let depth = makePrivateTex(.r32Float, internalWidth, internalHeight, depthUsage, "DevDepth"),
+              let motion = makePrivateTex(.rg16Float, internalWidth, internalHeight, motionUsage, "DevMotion")
         else {
             return false
         }
 
-        residencySet.addAllocations([a0, a1, color, depth, motion])
+        var allocs: [MTLAllocation] = [a0, a1, color, depth, motion]
+        if useMetalFX {
+            if let up = makePrivateTex(.rgba16Float, outputWidth, outputHeight, outUsage, "DevUpscaledHDR") {
+                upscaledColorTexture = up
+                allocs.append(up)
+            }
+        } else {
+            upscaledColorTexture = nil
+        }
+
+        residencySet.addAllocations(allocs)
         residencySet.commit()
 
         accumTextures = [a0, a1]
         colorTexture = color
         depthTexture = depth
         motionTexture = motion
-        textureSize = (width, height)
+        internalTextureSize = (internalWidth, internalHeight)
+        outputTextureSize = (outputWidth, outputHeight)
+        scalerNeedsReset = true
         return true
     }
 
@@ -234,12 +336,23 @@ final class Metal4DevicePipeline {
         slot: Int,
         drawable: CAMetalDrawable,
         displayTarget: MTLTexture,
-        width: Int,
-        height: Int,
+        internalWidth: Int,
+        internalHeight: Int,
+        outputWidth: Int,
+        outputHeight: Int,
+        jitter: SIMD2<Float>,
+        resetHistory: Bool,
         frameSemaphore: DispatchSemaphore
     ) {
         let dirty = syncWorldIfNeeded(world)
-        guard ensureTextures(width: width, height: height),
+        let useMetalFX = (internalWidth != outputWidth || internalHeight != outputHeight)
+        guard ensureTextures(
+            internalWidth: internalWidth,
+            internalHeight: internalHeight,
+            outputWidth: outputWidth,
+            outputHeight: outputHeight,
+            useMetalFX: useMetalFX
+        ),
               accumTextures.count == 2,
               let color = colorTexture,
               let depth = depthTexture,
@@ -295,12 +408,54 @@ final class Metal4DevicePipeline {
             let w = max(1, min(8, rtPipeline.threadExecutionWidth))
             let h = max(1, min(8, rtPipeline.maxTotalThreadsPerThreadgroup / w))
             encoder.dispatchThreadgroups(
-                threadgroupsPerGrid: MTLSize(width: (width + w - 1) / w, height: (height + h - 1) / h, depth: 1),
+                threadgroupsPerGrid: MTLSize(width: (internalWidth + w - 1) / w, height: (internalHeight + h - 1) / h, depth: 1),
                 threadsPerThreadgroup: MTLSize(width: w, height: h, depth: 1)
             )
+
+            #if canImport(MetalFX)
+            if let scaler = temporalScaler, let upTex = upscaledColorTexture {
+                encoder.endEncoding()
+                scaler.colorTexture = color
+                scaler.depthTexture = depth
+                scaler.motionTexture = motion
+                scaler.outputTexture = upTex
+                scaler.inputContentWidth = internalWidth
+                scaler.inputContentHeight = internalHeight
+                scaler.jitterOffsetX = jitter.x
+                scaler.jitterOffsetY = jitter.y
+                scaler.motionVectorScaleX = 1.0
+                scaler.motionVectorScaleY = 1.0
+                scaler.reset = resetHistory || scalerNeedsReset
+                scalerNeedsReset = false
+                scaler.encode(commandBuffer: commandBuffer)
+
+                if let postEncoder = commandBuffer.makeComputeCommandEncoder() {
+                    postEncoder.label = "TonemapAfterMetalFX"
+                    tonemapArgTable.setAddress(uniformRingBuffer.gpuAddress + UInt64(uniformOffset), index: 0)
+                    tonemapArgTable.setTexture(upTex.gpuResourceID, index: 0)
+                    tonemapArgTable.setTexture(displayTarget.gpuResourceID, index: 1)
+                    postEncoder.setComputePipelineState(tonemapPipeline)
+                    postEncoder.setArgumentTable(tonemapArgTable)
+                    let tw = max(1, min(8, tonemapPipeline.threadExecutionWidth))
+                    let th = max(1, min(8, tonemapPipeline.maxTotalThreadsPerThreadgroup / tw))
+                    postEncoder.dispatchThreadgroups(
+                        threadgroupsPerGrid: MTLSize(width: (outputWidth + tw - 1) / tw, height: (outputHeight + th - 1) / th, depth: 1),
+                        threadsPerThreadgroup: MTLSize(width: tw, height: th, depth: 1)
+                    )
+                    postEncoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit, visibilityOptions: .device)
+                    postEncoder.copy(sourceTexture: displayTarget, destinationTexture: drawable.texture)
+                    postEncoder.endEncoding()
+                }
+            } else {
+                encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit, visibilityOptions: .device)
+                encoder.copy(sourceTexture: displayTarget, destinationTexture: drawable.texture)
+                encoder.endEncoding()
+            }
+            #else
             encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit, visibilityOptions: .device)
             encoder.copy(sourceTexture: displayTarget, destinationTexture: drawable.texture)
             encoder.endEncoding()
+            #endif
         }
 
         commandBuffer.endCommandBuffer()
@@ -334,7 +489,13 @@ final class Metal4DevicePipeline {
         desc.storageMode = .private
         desc.usage = [.shaderWrite, .shaderRead]
 
-        guard ensureTextures(width: width, height: height),
+        guard ensureTextures(
+            internalWidth: width,
+            internalHeight: height,
+            outputWidth: width,
+            outputHeight: height,
+            useMetalFX: false
+        ),
               accumTextures.count == 2,
               let privateTarget = device.makeTexture(descriptor: desc),
               let stagingBuffer = device.makeBuffer(length: totalBytes, options: .storageModeShared),

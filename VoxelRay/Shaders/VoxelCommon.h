@@ -304,8 +304,9 @@ inline float3 linearToSRGB(float3 c) {
     return pow(clamp(c, 0.0f, 1.0f), float3(1.0f / 2.2f));
 }
 
-// Declaration for Phase 3 Lighting.metal path tracer / Phase 2 forward shading
-float3 shadeVoxelPath(
+// Functions implemented in Lighting.metal
+float3 evaluateNishitaSky(float3 dir, float3 sunDir, uint biomeId);
+float3 traceMonteCarloDDA(
     float3 origin,
     float3 dir,
     uint2 gid,
