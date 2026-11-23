@@ -9,8 +9,9 @@
   - `com.voxelray.app.materials.crystal` (Prism Material Pack — `$1.99` Non-Consumable)
 - **Xcode / SDK:** Xcode 27.2 (`27B52`), `iPhoneOS27.2.sdk`, Deployment Target `iOS 26.0`
 - **Target Simulator:** Auto-selected highest-res 6.9" Pro Max (`iPhone 18 Pro Max` on `iOS 27.2`, UDID `568FBCE6-F535-4C1D-B451-236865D061B4`)
-- **GitHub Repository:** Pending (Phase 5)
-- **ASC App ID / Version / Build:** Pending (Phase 5)
+- **GitHub Repository:** `https://github.com/fremxhk/VoxelRay` (branch `main`)
+- **Release Binary Verified:** `artifacts/ExportLocal/VoxelRay.ipa` (`1.0.0 (1)`, signed `Apple Distribution`, profile `iOS Team Store Provisioning Profile: com.voxelray.app`)
+- **ASC App Record Blocker:** `POST /v1/apps` returned `HTTP 403 FORBIDDEN_ERROR` (`The resource 'apps' does not allow 'CREATE'. Allowed operations are: GET_COLLECTION, GET_INSTANCE, UPDATE`). Once the bare App record for `com.voxelray.app` is created in App Store Connect Web UI, run `./scripts/stage_release_and_upload.sh` to upload and stage Draft `1.0.0`.
 
 ---
 
@@ -20,4 +21,4 @@
 - [x] **Phase 2:** `VoxelWorld.swift` (3 biomes), `Metal4DevicePipeline.swift` + `VoxelIntersect.metal`, `SimulatorComputePipeline.swift` + `SimulatorFallback.metal`, `VoxelWorldTests` (3), expanded `RendererSmokeTests` (3) — 12/12 passed (`MTL_DEBUG_LAYER=1`, `generic/platform=iOS` built)
 - [x] **Phase 3:** `Lighting.metal` (multi-bounce GI, Nishita sky, dielectric refraction, firefly clamp, ACES, temporal accum), tap-to-destroy + haptics, MetalFX thermal scaling, Photo Mode (`PhotoShareSheet.swift`), `DestructionTests` (3), expanded `VoxelRayUITests` (1) — 15/15 passed (`MTL_DEBUG_LAYER=1`, `generic/platform=iOS` built)
 - [x] **Phase 4:** `StoreManager.swift`, `VoxelRay.storekit`, `PaywallView.swift`, `PrivacyInfo.xcprivacy`, `generate_icon.swift` (`1024x1024` 24-bit RGB `hasAlpha: no`), `StoreKitTests` (1), `ScreenshotCaptureUITests` (1 -> 4 upright `2868x1320` `hasAlpha: no` PNGs) — 16/16 main CI + 1/1 screenshot capture passed
-- [ ] **Phase 5:** `README.md`, `PRIVACY.md`, `SUPPORT.md`, GitHub push (`fremxhk/VoxelRay`), Release archive & upload, `scripts/asc_stage_draft.py` -> `PREPARE_FOR_SUBMISSION` Draft (HARD STOP)
+- [ ] **Phase 5 (Partial — Blocked at `POST /v1/apps` HTTP 403):** `README.md`, `PRIVACY.md`, `SUPPORT.md` committed; `https://github.com/fremxhk/VoxelRay` pushed; `scripts/asc_stage_draft.py` & `scripts/stage_release_and_upload.sh` ready; signed `VoxelRay.ipa` (`1.0.0 (1)`) exported & verified locally; waiting on App record creation in ASC Web UI before running `./scripts/stage_release_and_upload.sh`.
