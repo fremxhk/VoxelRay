@@ -15,6 +15,9 @@ public final class Camera: ObservableObject {
     private var prevRight: SIMD3<Float>
     private var prevUp: SIMD3<Float>
 
+    private var shakeAmplitude: Float = 0
+    private var shakePhase: Float = 0
+
     public static let minPitch: Float = -1.35
     public static let maxPitch: Float = 1.35
 
@@ -132,6 +135,27 @@ public final class Camera: ObservableObject {
         frameIndex &+= 1
     }
 
+    public func applyImpactShake(intensity: Float) {
+        shakeAmplitude = min(max(shakeAmplitude, intensity), 0.45)
+        shakePhase = 0
+    }
+
+    public func updateShake(dt: Float) {
+        guard shakeAmplitude > 1e-4 else {
+            shakeAmplitude = 0
+            return
+        }
+        let clampedDt = min(max(dt, 0.001), 0.05)
+        shakePhase += clampedDt * 58.0
+        shakeAmplitude *= exp(-clampedDt * 14.0)
+        if shakeAmplitude <= 0.004 {
+            shakeAmplitude = 0
+            resetAccumulation()
+        } else {
+            resetAccumulation()
+        }
+    }
+
     private func syncPreviousBasis() {
         let basis = Self.computeBasis(yaw: yaw, pitch: pitch)
         prevPosition = position
@@ -168,7 +192,15 @@ public final class Camera: ObservableObject {
         timeSec: Float
     ) {
         let basis = Self.computeBasis(yaw: yaw, pitch: pitch)
-        uniforms.cameraPos = SIMD4<Float>(position, fovY)
+        let shakeOffset: SIMD3<Float>
+        if shakeAmplitude > 0.001 {
+            let sx = sin(shakePhase) * shakeAmplitude
+            let sy = cos(shakePhase * 1.37) * shakeAmplitude * 0.8
+            shakeOffset = basis.right * sx + basis.up * sy
+        } else {
+            shakeOffset = .zero
+        }
+        uniforms.cameraPos = SIMD4<Float>(position + shakeOffset, fovY)
         uniforms.cameraForward = SIMD4<Float>(basis.forward, aspect)
         uniforms.cameraRight = SIMD4<Float>(basis.right, jitter.x)
         uniforms.cameraUp = SIMD4<Float>(basis.up, jitter.y)
@@ -194,9 +226,9 @@ public final class Camera: ObservableObject {
             Float(outputWidth),
             timeSec
         )
-        uniforms.outputAndExposure = SIMD4<Float>(Float(outputHeight), 1.15, 2.0, 8.0)
+        uniforms.outputAndExposure = SIMD4<Float>(Float(outputHeight), 0.98, 2.0, 7.5)
         uniforms.extra0 = .zero
         uniforms.extra1 = .zero
-        uniforms.extra2 = .zero
+        uniforms.extra2 = SIMD4<Float>(0.36, 0.16, 0.0, 0.0)
     }
 }

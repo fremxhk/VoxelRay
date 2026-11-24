@@ -69,11 +69,13 @@ final class Metal4DevicePipeline {
 
     init?(device: MTLDevice, library: MTLLibrary, uniformRingBuffer: MTLBuffer) {
         guard device.supportsRaytracing,
+              device.supportsFamily(.apple9),
+              device.supportsFamily(.metal4),
               let queue = device.makeMTL4CommandQueue(),
               let cmdBuf = device.makeCommandBuffer(),
               let ev = device.makeSharedEvent()
         else {
-            NSLog("Metal4DevicePipeline unavailable on this device")
+            NSLog("Metal4DevicePipeline unavailable on this device (requires Apple9+ & Metal4 ray tracing); using ComputePathTracePipeline")
             return nil
         }
 
@@ -113,9 +115,9 @@ final class Metal4DevicePipeline {
 
             let toneFnDesc = MTL4LibraryFunctionDescriptor()
             toneFnDesc.library = library
-            toneFnDesc.name = "tonemapPresentKernel"
+            toneFnDesc.name = "bloomTonemapPresentKernel"
             let toneDesc = MTL4ComputePipelineDescriptor()
-            toneDesc.label = "TonemapPresentPSO"
+            toneDesc.label = "BloomTonemapPresentPSO"
             toneDesc.computeFunctionDescriptor = toneFnDesc
             tonePSO = try mtl4Compiler.makeComputePipelineState(descriptor: toneDesc)
         } catch {
@@ -430,7 +432,7 @@ final class Metal4DevicePipeline {
                 scaler.encode(commandBuffer: commandBuffer)
 
                 if let postEncoder = commandBuffer.makeComputeCommandEncoder() {
-                    postEncoder.label = "TonemapAfterMetalFX"
+                    postEncoder.label = "BloomTonemapAfterMetalFX"
                     tonemapArgTable.setAddress(uniformRingBuffer.gpuAddress + UInt64(uniformOffset), index: 0)
                     tonemapArgTable.setTexture(upTex.gpuResourceID, index: 0)
                     tonemapArgTable.setTexture(displayTarget.gpuResourceID, index: 1)
@@ -447,14 +449,44 @@ final class Metal4DevicePipeline {
                     postEncoder.endEncoding()
                 }
             } else {
-                encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit, visibilityOptions: .device)
-                encoder.copy(sourceTexture: displayTarget, destinationTexture: drawable.texture)
                 encoder.endEncoding()
+                if let postEncoder = commandBuffer.makeComputeCommandEncoder() {
+                    postEncoder.label = "BloomTonemapDirect"
+                    tonemapArgTable.setAddress(uniformRingBuffer.gpuAddress + UInt64(uniformOffset), index: 0)
+                    tonemapArgTable.setTexture(color.gpuResourceID, index: 0)
+                    tonemapArgTable.setTexture(displayTarget.gpuResourceID, index: 1)
+                    postEncoder.setComputePipelineState(tonemapPipeline)
+                    postEncoder.setArgumentTable(tonemapArgTable)
+                    let tw = max(1, min(8, tonemapPipeline.threadExecutionWidth))
+                    let th = max(1, min(8, tonemapPipeline.maxTotalThreadsPerThreadgroup / tw))
+                    postEncoder.dispatchThreadgroups(
+                        threadgroupsPerGrid: MTLSize(width: (outputWidth + tw - 1) / tw, height: (outputHeight + th - 1) / th, depth: 1),
+                        threadsPerThreadgroup: MTLSize(width: tw, height: th, depth: 1)
+                    )
+                    postEncoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit, visibilityOptions: .device)
+                    postEncoder.copy(sourceTexture: displayTarget, destinationTexture: drawable.texture)
+                    postEncoder.endEncoding()
+                }
             }
             #else
-            encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit, visibilityOptions: .device)
-            encoder.copy(sourceTexture: displayTarget, destinationTexture: drawable.texture)
             encoder.endEncoding()
+            if let postEncoder = commandBuffer.makeComputeCommandEncoder() {
+                postEncoder.label = "BloomTonemapDirect"
+                tonemapArgTable.setAddress(uniformRingBuffer.gpuAddress + UInt64(uniformOffset), index: 0)
+                tonemapArgTable.setTexture(color.gpuResourceID, index: 0)
+                tonemapArgTable.setTexture(displayTarget.gpuResourceID, index: 1)
+                postEncoder.setComputePipelineState(tonemapPipeline)
+                postEncoder.setArgumentTable(tonemapArgTable)
+                let tw = max(1, min(8, tonemapPipeline.threadExecutionWidth))
+                let th = max(1, min(8, tonemapPipeline.maxTotalThreadsPerThreadgroup / tw))
+                postEncoder.dispatchThreadgroups(
+                    threadgroupsPerGrid: MTLSize(width: (outputWidth + tw - 1) / tw, height: (outputHeight + th - 1) / th, depth: 1),
+                    threadsPerThreadgroup: MTLSize(width: tw, height: th, depth: 1)
+                )
+                postEncoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit, visibilityOptions: .device)
+                postEncoder.copy(sourceTexture: displayTarget, destinationTexture: drawable.texture)
+                postEncoder.endEncoding()
+            }
             #endif
         }
 
@@ -563,20 +595,36 @@ final class Metal4DevicePipeline {
                 )
 
                 if s == count - 1 {
-                    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit, visibilityOptions: .device)
-                    encoder.copy(
-                        sourceTexture: privateTarget,
-                        sourceSlice: 0,
-                        sourceLevel: 0,
-                        sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
-                        sourceSize: MTLSize(width: width, height: height, depth: 1),
-                        destinationBuffer: stagingBuffer,
-                        destinationOffset: 0,
-                        destinationBytesPerRow: bytesPerRow,
-                        destinationBytesPerImage: totalBytes
-                    )
+                    encoder.endEncoding()
+                    if let postEncoder = commandBuffer.makeComputeCommandEncoder() {
+                        tonemapArgTable.setAddress(uniformRingBuffer.gpuAddress + UInt64(offset), index: 0)
+                        tonemapArgTable.setTexture(color.gpuResourceID, index: 0)
+                        tonemapArgTable.setTexture(privateTarget.gpuResourceID, index: 1)
+                        postEncoder.setComputePipelineState(tonemapPipeline)
+                        postEncoder.setArgumentTable(tonemapArgTable)
+                        let tw = max(1, min(8, tonemapPipeline.threadExecutionWidth))
+                        let th = max(1, min(8, tonemapPipeline.maxTotalThreadsPerThreadgroup / tw))
+                        postEncoder.dispatchThreadgroups(
+                            threadgroupsPerGrid: MTLSize(width: (width + tw - 1) / tw, height: (height + th - 1) / th, depth: 1),
+                            threadsPerThreadgroup: MTLSize(width: tw, height: th, depth: 1)
+                        )
+                        postEncoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit, visibilityOptions: .device)
+                        postEncoder.copy(
+                            sourceTexture: privateTarget,
+                            sourceSlice: 0,
+                            sourceLevel: 0,
+                            sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+                            sourceSize: MTLSize(width: width, height: height, depth: 1),
+                            destinationBuffer: stagingBuffer,
+                            destinationOffset: 0,
+                            destinationBytesPerRow: bytesPerRow,
+                            destinationBytesPerImage: totalBytes
+                        )
+                        postEncoder.endEncoding()
+                    }
+                } else {
+                    encoder.endEncoding()
                 }
-                encoder.endEncoding()
             }
 
             commandBuffer.endCommandBuffer()

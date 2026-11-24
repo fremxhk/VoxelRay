@@ -58,10 +58,10 @@ kernel void simulatorPathTraceKernel(
     const device uint8_t* voxels [[buffer(1)]],
     texture2d<float, access::read> accumReadTex [[texture(0)]],
     texture2d<float, access::write> accumWriteTex [[texture(1)]],
-    texture2d<float, access::write> displayTex [[texture(2)]],
+    texture2d<float, access::write> hdrOutTex [[texture(2)]],
     uint2 gid [[thread_position_in_grid]]
 ) {
-    uint2 dims = uint2(displayTex.get_width(), displayTex.get_height());
+    uint2 dims = uint2(hdrOutTex.get_width(), hdrOutTex.get_height());
     if (gid.x >= dims.x || gid.y >= dims.y) {
         return;
     }
@@ -82,6 +82,6 @@ kernel void simulatorPathTraceKernel(
     float3 accumulated = mix(prev.rgb, radiance, weight);
     accumWriteTex.write(float4(accumulated, 1.0f), gid);
 
-    float3 srgb = linearToSRGB(acesFilmicToneMap(accumulated * uniforms.outputAndExposure.y));
-    displayTex.write(float4(srgb, 1.0f), gid);
+    float3 exposed = accumulated * uniforms.outputAndExposure.y;
+    hdrOutTex.write(float4(exposed, 1.0f), gid);
 }

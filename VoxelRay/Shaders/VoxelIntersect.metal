@@ -183,9 +183,18 @@ kernel void metal4PathTraceKernel(
 
     uint rng = wangHashRT(gid.x * 1973u ^ gid.y * 9277u ^ (frameIndex + 1u) * 26699u);
     float2 jitter = float2(uniforms.cameraRight.w, uniforms.cameraUp.w);
-    if (frameIndex > 0u) {
+    if (frameIndex > 0u && length(jitter) < 1e-4f) {
         jitter += float2(randFloatRT(rng) - 0.5f, randFloatRT(rng) - 0.5f) * 0.75f;
     }
+
+    float timeSec = uniforms.resolutionAndTime.w;
+    float elevationT = smoothstep(0.08f, 0.58f, clamp(sunDir.y, 0.0f, 1.0f));
+    float3 sunColor = (biomeId == 1u)
+        ? mix(float3(0.32f, 0.46f, 0.85f), float3(0.45f, 0.68f, 1.15f), elevationT)
+        : (biomeId == 2u
+            ? mix(float3(2.25f, 1.32f, 0.72f), float3(1.98f, 1.78f, 1.48f), elevationT)
+            : mix(mix(float3(0.65f, 0.62f, 0.95f), float3(2.15f, 1.28f, 0.68f), smoothstep(0.06f, 0.25f, sunDir.y)),
+                  float3(1.88f, 1.72f, 1.46f), elevationT));
 
     float3 rayOrigin = uniforms.cameraPos.xyz;
     float3 rayDir = computePrimaryRayDir(gid, dims, jitter, uniforms);
@@ -214,18 +223,52 @@ kernel void metal4PathTraceKernel(
         }
 
         MaterialProps mat = getMaterialProps(payload.materialId, float3(payload.voxelCoord) + 0.5f);
-        radiance += throughput * mat.emissive;
+        float2 aoBevel = evaluateVoxelAOAndBevel(hitPos, payload.normal, payload.voxelCoord, voxels);
+        float ao = aoBevel.x;
+        float bevelGlint = aoBevel.y;
 
-        // Direct sun Next Event Estimation shadow test via hardware BVH
+        radiance += throughput * mat.emissive;
+        radiance += throughput * mat.albedo * evaluateBlastDynamicLight(hitPos, payload.normal, uniforms);
+
         float3 n = payload.normal;
         float nDotL = dot(n, sunDir);
+
+        if (payload.materialId == MAT_WATER) {
+            float3 wn = evaluateWaterRippleNormal(hitPos, timeSec, n);
+            float cosV = clamp(dot(-rayDir, wn), 0.0f, 1.0f);
+            float reflProb = clamp(0.28f + 0.68f * pow(1.0f - cosV, 4.0f), 0.28f, 0.96f);
+
+            ray waterShadowRay(hitPos + n * 0.02f, sunDir, 0.001f, 150.0f);
+            VoxelRayPayload waterShadowPayload;
+            auto waterShadow = rt.intersect(waterShadowRay, accel, ift, waterShadowPayload);
+            float litFactor = (waterShadow.type != intersection_type::none) ? 0.22f : 1.0f;
+            if (waterShadow.type == intersection_type::none) {
+                float3 halfVec = normalize(sunDir - rayDir);
+                float spec = pow(max(dot(wn, halfVec), 0.0f), 110.0f);
+                radiance += throughput * sunColor * spec * 2.4f;
+            }
+
+            float caustic = 0.62f + 0.38f * sin(hitPos.x * 2.1f + timeSec * 1.8f) * cos(hitPos.z * 2.1f - timeSec * 1.5f);
+            float3 basinBase = (biomeId == 1u) ? float3(0.05f, 0.26f, 0.36f) : float3(0.10f, 0.60f, 0.72f);
+            float3 skyAmb = evaluateNishitaSky(float3(0.0f, 1.0f, 0.0f), sunDir, biomeId);
+            radiance += throughput * (1.0f - reflProb) * basinBase * (0.45f + 0.55f * caustic)
+                      * (0.42f * skyAmb + 0.58f * litFactor * sunColor * 0.35f) * ao;
+
+            float3 rDir = reflect(rayDir, wn);
+            if (rDir.y < 0.02f) rDir.y = 0.02f;
+            rayDir = normalize(rDir);
+            rayOrigin = hitPos + n * 0.02f;
+            throughput *= reflProb * float3(0.86f, 0.95f, 1.0f);
+            continue;
+        }
+
+        // Direct sun Next Event Estimation shadow test via hardware BVH
         if (nDotL > 0.0f && mat.transmission < 0.5f) {
             ray shadowRay(hitPos + n * 0.015f, sunDir, 0.001f, 160.0f);
             VoxelRayPayload shadowPayload;
             auto shadowHit = rt.intersect(shadowRay, accel, ift, shadowPayload);
             if (shadowHit.type == intersection_type::none) {
-                float3 sunColor = (biomeId == 1u) ? float3(0.55f, 0.75f, 1.25f) : float3(2.8f, 2.55f, 2.2f);
-                radiance += throughput * mat.albedo * sunColor * nDotL * (1.0f - mat.metallic * 0.5f);
+                radiance += throughput * mat.albedo * sunColor * nDotL * (1.0f - mat.metallic * 0.40f) * (1.0f + bevelGlint);
             }
         }
 
@@ -237,26 +280,52 @@ kernel void metal4PathTraceKernel(
             float r0 = (1.0f - eta) / (1.0f + eta);
             r0 = r0 * r0;
             float fresnel = r0 + (1.0f - r0) * pow(1.0f - cosTheta, 5.0f);
+
+            float3 halfVec = normalize(sunDir - rayDir);
+            float spec = pow(max(dot(orientN, halfVec), 0.0f), 96.0f);
+            radiance += throughput * sunColor * spec * 1.4f;
+
             float3 refracted = refract(rayDir, orientN, eta);
-            if (length(refracted) < 1e-4f || randFloatRT(rng) < fresnel) {
+            if (length(refracted) < 1e-4f || randFloatRT(rng) < (fresnel * 0.85f + 0.08f)) {
                 rayDir = reflect(rayDir, orientN);
-                rayOrigin = hitPos + orientN * 0.015f;
+                rayOrigin = hitPos + orientN * 0.02f;
+                throughput *= mix(float3(0.85f, 0.94f, 1.0f), mat.albedo, 0.35f);
             } else {
-                rayDir = normalize(refracted);
-                rayOrigin = hitPos - orientN * 0.015f;
-                throughput *= exp(-mat.absorption * 0.8f);
+                float3 bentDir = normalize(mix(rayDir, normalize(refracted), 0.28f));
+                float3 bMin = float3(payload.voxelCoord);
+                float3 bMax = bMin + 1.0f;
+                float3 invR = float3(
+                    fabs(bentDir.x) > 1e-5f ? (1.0f / bentDir.x) : 1e6f,
+                    fabs(bentDir.y) > 1e-5f ? (1.0f / bentDir.y) : 1e6f,
+                    fabs(bentDir.z) > 1e-5f ? (1.0f / bentDir.z) : 1e6f
+                );
+                float3 tExit3 = max((bMin - hitPos) * invR, (bMax - hitPos) * invR);
+                float tx = (fabs(bentDir.x) > 1e-5f && tExit3.x > 1e-4f) ? tExit3.x : 1e6f;
+                float ty = (fabs(bentDir.y) > 1e-5f && tExit3.y > 1e-4f) ? tExit3.y : 1e6f;
+                float tz = (fabs(bentDir.z) > 1e-5f && tExit3.z > 1e-4f) ? tExit3.z : 1e6f;
+                float exitStep = clamp(min(tx, min(ty, tz)), 0.02f, 1.74f);
+                rayDir = bentDir;
+                rayOrigin = hitPos + bentDir * (exitStep + 0.02f);
+                throughput *= mix(float3(0.88f, 0.95f, 1.0f), mat.albedo, 0.55f) * exp(-mat.absorption * 0.55f);
             }
-            throughput *= mat.albedo;
+            if (bounce == maxBounces - 1u) {
+                radiance += throughput * evaluateNishitaSky(rayDir, sunDir, biomeId);
+            }
         } else if (mat.metallic > 0.5f) {
             float3 refl = reflect(rayDir, n);
             float3 jitterDir = cosineSampleHemisphereRT(n, rng);
             rayDir = normalize(mix(refl, jitterDir, mat.roughness * mat.roughness));
             rayOrigin = hitPos + n * 0.015f;
-            throughput *= mat.albedo;
+            throughput *= mat.albedo * (0.75f + 0.25f * ao);
         } else {
-            rayDir = cosineSampleHemisphereRT(n, rng);
+            float3 sampleDir = cosineSampleHemisphereRT(n, rng);
+            if (bounce == maxBounces - 1u) {
+                radiance += throughput * mat.albedo * evaluateNishitaSky(n, sunDir, biomeId) * 0.28f * ao;
+                break;
+            }
+            rayDir = sampleDir;
             rayOrigin = hitPos + n * 0.015f;
-            throughput *= mat.albedo;
+            throughput *= mat.albedo * (0.55f + 0.45f * ao);
         }
 
         float maxC = max(radiance.r, max(radiance.g, radiance.b));

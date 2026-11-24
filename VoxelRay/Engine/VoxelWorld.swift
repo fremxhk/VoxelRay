@@ -86,10 +86,17 @@ public final class VoxelWorld {
     public static let bricksZ = depth / brickSize   // 16
     public static let brickCount = bricksX * bricksY * bricksZ // 2048
 
+    public static let maxUndoDepth = 12
+
     public private(set) var biome: VoxelBiome
     public private(set) var seed: UInt64
     public private(set) var voxels: [UInt8]
     public private(set) var revision: UInt64 = 1
+    private var undoHistory: [[UInt8]] = []
+
+    public var canUndo: Bool {
+        !undoHistory.isEmpty
+    }
 
     public init(biome: VoxelBiome = .sunlitCourtyard, seed: UInt64? = nil) {
         self.biome = biome
@@ -127,18 +134,34 @@ public final class VoxelWorld {
     public static func defaultCameraPose(for biome: VoxelBiome) -> (eye: SIMD3<Float>, target: SIMD3<Float>) {
         switch biome {
         case .sunlitCourtyard:
-            return (SIMD3<Float>(46.5, 17.5, 47.5), SIMD3<Float>(28.0, 6.0, 28.0))
+            return (SIMD3<Float>(45.0, 16.0, 46.5), SIMD3<Float>(30.5, 6.5, 30.5))
         case .neonCavern:
-            return (SIMD3<Float>(38.5, 11.0, 48.0), SIMD3<Float>(29.5, 7.0, 26.0))
+            return (SIMD3<Float>(39.0, 10.5, 48.0), SIMD3<Float>(30.5, 8.0, 27.5))
         case .glassCathedral:
-            return (SIMD3<Float>(40.5, 11.5, 53.5), SIMD3<Float>(30.5, 9.5, 20.0))
+            return (SIMD3<Float>(39.5, 10.5, 51.0), SIMD3<Float>(31.5, 11.5, 16.0))
         }
+    }
+
+    public func pushUndoSnapshot() {
+        undoHistory.append(voxels)
+        if undoHistory.count > Self.maxUndoDepth {
+            undoHistory.removeFirst()
+        }
+    }
+
+    @discardableResult
+    public func undo() -> Bool {
+        guard let prev = undoHistory.popLast() else { return false }
+        voxels = prev
+        revision &+= 1
+        return true
     }
 
     /// Regenerates the entire world deterministically for the given biome and seed.
     public func generate(biome: VoxelBiome, seed: UInt64? = nil) {
         self.biome = biome
         self.seed = seed ?? biome.defaultSeed
+        undoHistory.removeAll()
         for i in 0..<Self.voxelCount {
             voxels[i] = VoxelMaterial.air.rawValue
         }
@@ -416,24 +439,45 @@ public final class VoxelWorld {
             }
         }
 
-        // Recessed reflective water basin in courtyard center + stepping stones
+        // Recessed reflective water basin in courtyard center + stepped gold rim + stepping stones
+        fillBox(x0: 22, y0: 1, z0: 22, x1: 41, y1: 1, z1: 41, material: .travertine)
+        setVoxel(x: 22, y: 2, z: 22, material: .gold)
+        setVoxel(x: 41, y: 2, z: 22, material: .gold)
+        setVoxel(x: 22, y: 2, z: 41, material: .gold)
+        setVoxel(x: 41, y: 2, z: 41, material: .gold)
         fillBox(x0: 23, y0: 1, z0: 23, x1: 40, y1: 1, z1: 40, material: .water)
         for p in stride(from: 24, through: 39, by: 3) {
             fillBox(x0: p, y0: 1, z0: 31, x1: p + 1, y1: 1, z1: 32, material: .travertine)
         }
 
-        // Central golden obelisk & glowing amber brazier
-        fillBox(x0: 30, y0: 1, z0: 30, x1: 33, y1: 2, z1: 33, material: .travertine)
-        fillBox(x0: 31, y0: 3, z0: 31, x1: 32, y1: 10, z1: 32, material: .gold)
-        fillBox(x0: 31, y0: 11, z0: 31, x1: 32, y1: 12, z1: 32, material: .amberLantern)
+        // Central tiered golden obelisk & glowing amber brazier
+        fillBox(x0: 29, y0: 1, z0: 29, x1: 34, y1: 2, z1: 34, material: .travertine)
+        fillBox(x0: 30, y0: 2, z0: 30, x1: 33, y1: 3, z1: 33, material: .gold)
+        fillBox(x0: 31, y0: 4, z0: 31, x1: 32, y1: 11, z1: 32, material: .gold)
+        fillBox(x0: 31, y0: 12, z0: 31, x1: 32, y1: 13, z1: 32, material: .amberLantern)
 
-        // Perimeter colonnade pillars & terracotta roof entablature
+        // Perimeter colonnade pillars with classical arches & terracotta entablature
         let pillarCoords = stride(from: 11, through: 52, by: 6)
         for p in pillarCoords {
             for edge in [(p, 11), (p, 52), (11, p), (52, p)] {
                 fillBox(x0: edge.0, y0: 2, z0: edge.1, x1: edge.0 + 1, y1: 11, z1: edge.1 + 1, material: .travertine)
                 setVoxel(x: edge.0, y: 11, z: edge.1, material: .gold)
             }
+        }
+        // Sculpted stone colonnade arch haunches spanning bay openings
+        for bay in stride(from: 13, through: 49, by: 6) {
+            fillBox(x0: bay, y0: 11, z0: 11, x1: bay + 3, y1: 11, z1: 12, material: .travertine)
+            fillBox(x0: bay, y0: 11, z0: 52, x1: bay + 3, y1: 11, z1: 53, material: .travertine)
+            fillBox(x0: 11, y0: 11, z0: bay, x1: 12, y1: 11, z1: bay + 3, material: .travertine)
+            fillBox(x0: 52, y0: 11, z0: bay, x1: 53, y1: 11, z1: bay + 3, material: .travertine)
+            setVoxel(x: bay, y: 10, z: 11, material: .travertine)
+            setVoxel(x: bay + 3, y: 10, z: 11, material: .travertine)
+            setVoxel(x: bay, y: 10, z: 52, material: .travertine)
+            setVoxel(x: bay + 3, y: 10, z: 52, material: .travertine)
+            setVoxel(x: 11, y: 10, z: bay, material: .travertine)
+            setVoxel(x: 11, y: 10, z: bay + 3, material: .travertine)
+            setVoxel(x: 52, y: 10, z: bay, material: .travertine)
+            setVoxel(x: 52, y: 10, z: bay + 3, material: .travertine)
         }
         // Roof lintels & terracotta eaves
         fillBox(x0: 10, y0: 12, z0: 10, x1: 53, y1: 12, z1: 13, material: .travertine)
@@ -574,6 +618,23 @@ public final class VoxelWorld {
             let sideX = (rng.next() % 2 == 0) ? 20 : 43
             let cz = 16 + Int(rng.next() % 32)
             fillBox(x0: sideX, y0: 2, z0: cz, x1: sideX, y1: 5, z1: cz, material: .prismCrystal)
+        }
+
+        // Dramatic stained-glass Prism Rose Window behind the high altar (z = 11)
+        let rwCenterX = 31
+        let rwCenterY = 17
+        for dy in -8...8 {
+            for dx in -8...8 {
+                let r2 = dx * dx + dy * dy
+                if r2 >= 46 && r2 <= 68 {
+                    setVoxel(x: rwCenterX + dx, y: rwCenterY + dy, z: 11, material: .gold)
+                } else if r2 < 46 {
+                    let mat: VoxelMaterial = (abs(dx) <= 1 || abs(dy) <= 1 || abs(abs(dx) - abs(dy)) <= 1)
+                        ? .gold
+                        : ((dx + dy) % 3 == 0 ? .prismCrystal : ((dx % 2 == 0) ? .neonCyan : .amberLantern))
+                    setVoxel(x: rwCenterX + dx, y: rwCenterY + dy, z: 11, material: mat)
+                }
+            }
         }
     }
 }

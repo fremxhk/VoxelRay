@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Idempotent App Store Connect Draft Staging Utility for VoxelRay.
-Strictly prepares App metadata, Build attachment, Screenshots, and IAP drafts
-up to PREPARE_FOR_SUBMISSION. Never submits for App Review.
+Idempotent App Store Connect Draft Staging & TestFlight Utility for VoxelRay.
+Strictly prepares App metadata, Content Rights, Age Rating (4+), Pricing & Global Availability,
+TestFlight Internal Testing, Build attachment, 6.9" Screenshots, and Non-Consumable IAPs
+up to PREPARE_FOR_SUBMISSION. NEVER submits for App Review.
 """
 
 import argparse
@@ -33,19 +34,27 @@ assert len(KEYWORDS) <= 100
 
 DESCRIPTION = (
     "VoxelRay is a real-time ray-traced destructible voxel sandbox built natively for iPhone.\n\n"
-    "Tap to blast craters through sunlit travertine colonnades, sculpt glowing cyan and magenta "
-    "caverns, or build with refractive dielectric glass and prism crystal. Powered by hardware-accelerated "
-    "Metal ray tracing and thermally adaptive MetalFX upscaling, every bounce of sunlight, shadow, "
-    "glass refraction, and neon emission converges right on your iPhone with zero servers or tracking.\n\n"
+    "Tap to shatter travertine colonnades with physics-driven 3D voxel debris, sculpt with Gold, "
+    "glowing Neon Cyan, Glass, and iridescent Prism Crystal brushes, and shift lighting from golden sunset "
+    "to midnight obsidian with responsive procedural spatial audio. Powered by Metal ray tracing, optical HDR bloom, "
+    "and adaptive thermal scaling with zero servers, ads, or tracking.\n\n"
     "Key Features:\n"
-    "- Multi-bounce Monte Carlo global illumination with analytical atmospheric sky\n"
-    "- Tap-to-carve spherical destruction with tactile haptic feedback and instant world reset\n"
-    "- Virtual thumbstick flight and intuitive touch pan-look camera\n"
+    "- Multi-bounce Monte Carlo global illumination, water reflections & optical bloom\n"
+    "- Tap-to-carve spherical destruction with 3D debris physics, camera shake & multi-step Undo\n"
+    "- Free Gold, Neon Cyan, and Glass sculpting brushes plus curated Dawn/Noon/Sunset/Night presets\n"
+    "- Procedural material foley audio & spatial biome atmospheres\n"
     "- 64-sample Photo Mode convergence with instant iOS Share Sheet export\n"
-    "- Optional Architect Pro and Prism Material Pack unlocks via StoreKit 2"
+    "- One-time Architect Pro and Prism Material Pack unlocks via StoreKit 2"
 )
 
-PROMO_TEXT = "Real-time Metal ray-traced destructible voxel worlds on iPhone."
+PROMO_TEXT = "Shatter, sculpt, and ray-trace destructible voxel worlds in real time on iPhone."
+
+
+def _read_config_file() -> dict:
+    cfg_path = Path.home() / ".config" / "cuiju-appstore" / "config.json"
+    if cfg_path.exists():
+        return json.loads(cfg_path.read_text())
+    return {}
 
 
 def load_credentials():
@@ -68,12 +77,10 @@ def load_credentials():
     )
 
     if not (key_id and issuer_id and key_path):
-        cfg_path = Path.home() / ".config" / "cuiju-appstore" / "config.json"
-        if cfg_path.exists():
-            cfg = json.loads(cfg_path.read_text())
-            key_id = key_id or cfg.get("key_id")
-            issuer_id = issuer_id or cfg.get("issuer_id")
-            key_path = key_path or cfg.get("private_key_path")
+        cfg = _read_config_file()
+        key_id = key_id or cfg.get("key_id")
+        issuer_id = issuer_id or cfg.get("issuer_id")
+        key_path = key_path or cfg.get("private_key_path")
 
     if not (key_id and issuer_id and key_path):
         raise RuntimeError(
@@ -82,6 +89,17 @@ def load_credentials():
     if not Path(key_path).exists():
         raise RuntimeError(f"ASC private key file not found: {key_path}")
     return key_id, issuer_id, key_path
+
+
+def load_review_contact() -> dict:
+    cfg = _read_config_file()
+    rc = cfg.get("review_contact", {})
+    return {
+        "first_name": os.environ.get("ASC_REVIEW_FIRST_NAME") or rc.get("first_name", ""),
+        "last_name": os.environ.get("ASC_REVIEW_LAST_NAME") or rc.get("last_name", ""),
+        "phone": os.environ.get("ASC_REVIEW_PHONE") or rc.get("phone", ""),
+        "email": os.environ.get("ASC_REVIEW_EMAIL") or rc.get("email", ""),
+    }
 
 
 def _b64url(b: bytes) -> str:
@@ -155,6 +173,15 @@ class ASCClient:
             if e.code in allow_statuses:
                 return e.code, parsed
             raise ASCHTTPError(e.code, path, parsed)
+
+    def get_paginated(self, path: str) -> list:
+        items = []
+        next_url = path
+        while next_url:
+            _, res = self.request("GET", next_url)
+            items.extend(res.get("data", []))
+            next_url = res.get("links", {}).get("next")
+        return items
 
 
 class ASCHTTPError(RuntimeError):
@@ -283,17 +310,484 @@ def upload_asset_binary(upload_ops: list, file_bytes: bytes):
                 raise RuntimeError(f"Asset upload chunk failed HTTP {resp.status}")
 
 
+def find_or_update_ios_version(client: ASCClient, app_id: str) -> dict:
+    _, vers = client.request("GET", f"/v1/apps/{app_id}/appStoreVersions?filter[platform]=IOS&limit=20")
+    existing = None
+    for v in vers.get("data", []):
+        if v["attributes"].get("appStoreState") == "PREPARE_FOR_SUBMISSION":
+            existing = v
+            break
+    if existing:
+        vid = existing["id"]
+        attrs = existing["attributes"]
+        if attrs.get("versionString") != VERSION_STRING or attrs.get("releaseType") != "MANUAL" or attrs.get("copyright") != "2026 Ho Kit Cheung":
+            _, patched = client.request(
+                "PATCH",
+                f"/v1/appStoreVersions/{vid}",
+                {
+                    "data": {
+                        "type": "appStoreVersions",
+                        "id": vid,
+                        "attributes": {
+                            "versionString": VERSION_STRING,
+                            "releaseType": "MANUAL",
+                            "copyright": "2026 Ho Kit Cheung",
+                        },
+                    }
+                },
+            )
+            existing = patched["data"]
+            print(f"Updated existing PREPARE_FOR_SUBMISSION version {vid} -> {VERSION_STRING}")
+        return existing
+
+    _, created_ver = client.request(
+        "POST",
+        "/v1/appStoreVersions",
+        {
+            "data": {
+                "type": "appStoreVersions",
+                "attributes": {
+                    "platform": "IOS",
+                    "versionString": VERSION_STRING,
+                    "releaseType": "MANUAL",
+                    "copyright": "2026 Ho Kit Cheung",
+                },
+                "relationships": {"app": {"data": {"type": "apps", "id": app_id}}},
+            }
+        },
+    )
+    print(f"Created new version {created_ver['data']['id']} ({VERSION_STRING})")
+    return created_ver["data"]
+
+
+def stage_testflight_internal(client: ASCClient, app_id: str, build_id: str, review_contact: dict):
+    print("Configuring TestFlight Internal Testing...")
+    _, bg_res = client.request("GET", f"/v1/apps/{app_id}/betaGroups?limit=20")
+    internal_group = None
+    for g in bg_res.get("data", []):
+        if g["attributes"].get("isInternalGroup") is True:
+            internal_group = g
+            break
+
+    if internal_group is None:
+        _, created_bg = client.request(
+            "POST",
+            "/v1/betaGroups",
+            {
+                "data": {
+                    "type": "betaGroups",
+                    "attributes": {
+                        "name": "Internal Testers",
+                        "isInternalGroup": True,
+                        "hasAccessToAllBuilds": True,
+                        "feedbackEnabled": True,
+                    },
+                    "relationships": {"app": {"data": {"type": "apps", "id": app_id}}},
+                }
+            },
+        )
+        internal_group = created_bg["data"]
+        print(f"  Created TestFlight Internal Group: {internal_group['id']}")
+    else:
+        gid = internal_group["id"]
+        attrs = internal_group["attributes"]
+        if not attrs.get("hasAccessToAllBuilds") or not attrs.get("feedbackEnabled"):
+            client.request(
+                "PATCH",
+                f"/v1/betaGroups/{gid}",
+                {
+                    "data": {
+                        "type": "betaGroups",
+                        "id": gid,
+                        "attributes": {"hasAccessToAllBuilds": True, "feedbackEnabled": True},
+                    }
+                },
+            )
+        print(f"  Using existing TestFlight Internal Group: {gid}")
+
+    group_id = internal_group["id"]
+    print(f"ASC_BETA_GROUP_ID={group_id}")
+
+    # Discover internal team Account Holder email
+    _, users_res = client.request("GET", "/v1/users?limit=10")
+    tester_email = os.environ.get("ASC_INTERNAL_TESTER_EMAIL")
+    tester_first = review_contact.get("first_name") or "Ho Kit"
+    tester_last = review_contact.get("last_name") or "Cheung"
+    if not tester_email and users_res.get("data"):
+        u = users_res["data"][0]
+        tester_email = u["attributes"].get("username")
+        tester_first = u["attributes"].get("firstName") or tester_first
+        tester_last = u["attributes"].get("lastName") or tester_last
+
+    if tester_email:
+        _, group_testers = client.request("GET", f"/v1/betaGroups/{group_id}/betaTesters?limit=50")
+        already_in_group = any(
+            (t["attributes"].get("email") or "").lower() == tester_email.lower()
+            for t in group_testers.get("data", [])
+        )
+        if not already_in_group:
+            _, found_testers = client.request(
+                "GET",
+                f"/v1/betaTesters?filter[email]={urllib.parse.quote(tester_email)}&limit=10",
+            )
+            linked = False
+            for t in found_testers.get("data", []):
+                st, _ = client.request(
+                    "POST",
+                    f"/v1/betaGroups/{group_id}/relationships/betaTesters",
+                    {"data": [{"type": "betaTesters", "id": t["id"]}]},
+                    allow_statuses=(200, 201, 204, 409, 422),
+                )
+                if st in (200, 201, 204):
+                    linked = True
+                    print(f"  Linked internal beta tester {t['id']} to group {group_id}")
+                    break
+            if not linked:
+                try:
+                    client.request(
+                        "POST",
+                        "/v1/betaTesters",
+                        {
+                            "data": {
+                                "type": "betaTesters",
+                                "attributes": {
+                                    "email": tester_email,
+                                    "firstName": tester_first,
+                                    "lastName": tester_last,
+                                },
+                                "relationships": {
+                                    "betaGroups": {"data": [{"type": "betaGroups", "id": group_id}]}
+                                },
+                            }
+                        },
+                    )
+                    print(f"  Added internal beta tester to group {group_id}")
+                except ASCHTTPError as e:
+                    print(f"  Internal tester creation note: {e}")
+
+    _, final_testers = client.request("GET", f"/v1/betaGroups/{group_id}/betaTesters?limit=50")
+    print(f"TESTFLIGHT_TESTER_COUNT={len(final_testers.get('data', []))}")
+
+    # Beta App Localization (en-US)
+    feedback_email = review_contact.get("email") or tester_email or ""
+    beta_desc = (
+        "Internal TestFlight build of VoxelRay: real-time Metal ray-traced destructible voxel sandbox "
+        "with procedural material foley audio, 3D debris physics, optical bloom, and StoreKit 2 unlocks."
+    )
+    _, bals = client.request("GET", f"/v1/apps/{app_id}/betaAppLocalizations")
+    bal_id = next(
+        (l["id"] for l in bals.get("data", []) if l["attributes"].get("locale") == "en-US"),
+        None,
+    )
+    if bal_id:
+        client.request(
+            "PATCH",
+            f"/v1/betaAppLocalizations/{bal_id}",
+            {
+                "data": {
+                    "type": "betaAppLocalizations",
+                    "id": bal_id,
+                    "attributes": {
+                        "description": beta_desc,
+                        "feedbackEmail": feedback_email,
+                        "marketingUrl": MARKETING_URL,
+                    },
+                }
+            },
+        )
+    else:
+        client.request(
+            "POST",
+            "/v1/betaAppLocalizations",
+            {
+                "data": {
+                    "type": "betaAppLocalizations",
+                    "attributes": {
+                        "locale": "en-US",
+                        "description": beta_desc,
+                        "feedbackEmail": feedback_email,
+                        "marketingUrl": MARKETING_URL,
+                    },
+                    "relationships": {"app": {"data": {"type": "apps", "id": app_id}}},
+                }
+            },
+        )
+
+    # Beta App Review Details
+    if review_contact.get("email") and review_contact.get("phone"):
+        client.request(
+            "PATCH",
+            f"/v1/betaAppReviewDetails/{app_id}",
+            {
+                "data": {
+                    "type": "betaAppReviewDetails",
+                    "id": app_id,
+                    "attributes": {
+                        "contactFirstName": review_contact["first_name"],
+                        "contactLastName": review_contact["last_name"],
+                        "contactPhone": review_contact["phone"],
+                        "contactEmail": review_contact["email"],
+                        "demoAccountRequired": False,
+                        "notes": "No login required. Landscape Metal ray-tracing sandbox with StoreKit 2 non-consumable unlocks.",
+                    },
+                }
+            },
+        )
+
+    # Beta Build Localization (What to Test)
+    whats_new = (
+        "Initial 1.0.0 TestFlight build: test tap-to-carve destruction across Sunlit Courtyard, "
+        "live preview & StoreKit 2 unlocks for Neon Cavern & Glass Cathedral, spatial material audio, "
+        "free Gold/Neon/Glass brushes, Undo, Dawn-Night presets, and 64-sample Photo Mode export."
+    )
+    _, bbls = client.request("GET", f"/v1/builds/{build_id}/betaBuildLocalizations")
+    bbl_id = next(
+        (l["id"] for l in bbls.get("data", []) if l["attributes"].get("locale") == "en-US"),
+        None,
+    )
+    if bbl_id:
+        client.request(
+            "PATCH",
+            f"/v1/betaBuildLocalizations/{bbl_id}",
+            {
+                "data": {
+                    "type": "betaBuildLocalizations",
+                    "id": bbl_id,
+                    "attributes": {"whatsNew": whats_new},
+                }
+            },
+        )
+    else:
+        client.request(
+            "POST",
+            "/v1/betaBuildLocalizations",
+            {
+                "data": {
+                    "type": "betaBuildLocalizations",
+                    "attributes": {"locale": "en-US", "whatsNew": whats_new},
+                    "relationships": {"build": {"data": {"type": "builds", "id": build_id}}},
+                }
+            },
+        )
+
+    # Enable autoNotifyEnabled on buildBetaDetails and check TestFlight state
+    _, bbd = client.request("GET", f"/v1/builds/{build_id}/buildBetaDetail")
+    if bbd.get("data"):
+        detail_id = bbd["data"]["id"]
+        try:
+            _, updated_bbd = client.request(
+                "PATCH",
+                f"/v1/buildBetaDetails/{detail_id}",
+                {
+                    "data": {
+                        "type": "buildBetaDetails",
+                        "id": detail_id,
+                        "attributes": {"autoNotifyEnabled": True},
+                    }
+                },
+            )
+            bbd_attrs = updated_bbd["data"]["attributes"]
+        except ASCHTTPError:
+            bbd_attrs = bbd["data"]["attributes"]
+        print(f"TESTFLIGHT_INTERNAL_STATE={bbd_attrs.get('internalBuildState')}")
+        print(f"TESTFLIGHT_EXTERNAL_STATE={bbd_attrs.get('externalBuildState')}")
+        print(f"TESTFLIGHT_AUTO_NOTIFY={bbd_attrs.get('autoNotifyEnabled')}")
+
+
+def stage_content_rights_and_age_rating(client: ASCClient, app_id: str, app_info_id: str):
+    client.request(
+        "PATCH",
+        f"/v1/apps/{app_id}",
+        {
+            "data": {
+                "type": "apps",
+                "id": app_id,
+                "attributes": {"contentRightsDeclaration": "DOES_NOT_USE_THIRD_PARTY_CONTENT"},
+            }
+        },
+    )
+    print("Set Content Rights: DOES_NOT_USE_THIRD_PARTY_CONTENT")
+
+    _, age_res = client.request("GET", f"/v1/appInfos/{app_info_id}/ageRatingDeclaration")
+    age_id = age_res["data"]["id"]
+    client.request(
+        "PATCH",
+        f"/v1/ageRatingDeclarations/{age_id}",
+        {
+            "data": {
+                "type": "ageRatingDeclarations",
+                "id": age_id,
+                "attributes": {
+                    "advertising": False,
+                    "alcoholTobaccoOrDrugUseOrReferences": "NONE",
+                    "contests": "NONE",
+                    "gambling": False,
+                    "gamblingSimulated": "NONE",
+                    "gunsOrOtherWeapons": "NONE",
+                    "healthOrWellnessTopics": False,
+                    "lootBox": False,
+                    "medicalOrTreatmentInformation": "NONE",
+                    "messagingAndChat": False,
+                    "parentalControls": False,
+                    "profanityOrCrudeHumor": "NONE",
+                    "ageAssurance": False,
+                    "sexualContentGraphicAndNudity": "NONE",
+                    "sexualContentOrNudity": "NONE",
+                    "socialMedia": False,
+                    "socialMediaAgeRestricted": False,
+                    "horrorOrFearThemes": "NONE",
+                    "matureOrSuggestiveThemes": "NONE",
+                    "unrestrictedWebAccess": False,
+                    "userGeneratedContent": False,
+                    "violenceCartoonOrFantasy": "NONE",
+                    "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+                    "violenceRealistic": "NONE",
+                    "ageRatingOverride": "NONE",
+                    "ageRatingOverrideV2": "NONE",
+                    "koreaAgeRatingOverride": "NONE",
+                },
+            }
+        },
+    )
+    _, ai_check = client.request("GET", f"/v1/appInfos/{app_info_id}")
+    ai_attrs = ai_check["data"]["attributes"]
+    print(f"APP_STORE_AGE_RATING={ai_attrs.get('appStoreAgeRating')}")
+
+
+def stage_pricing_and_availability(client: ASCClient, app_id: str) -> list[str]:
+    territories = client.get_paginated("/v1/territories?limit=200")
+    territory_ids = [t["id"] for t in territories]
+
+    # App Price Schedule (Free $0.00 USA base)
+    st_ps, cur_ps = client.request("GET", f"/v1/apps/{app_id}/appPriceSchedule", allow_statuses=(200, 404))
+    if st_ps == 200 and cur_ps.get("data"):
+        print(f"App Price Schedule already exists (id={cur_ps['data']['id']})")
+    else:
+        _, pp_res = client.request("GET", f"/v1/apps/{app_id}/appPricePoints?filter[territory]=USA&limit=20")
+        free_pp = next(
+            (p["id"] for p in pp_res.get("data", []) if float(p["attributes"].get("customerPrice", 99)) == 0.0),
+            None,
+        )
+        if not free_pp:
+            raise RuntimeError("Could not locate Free USA appPricePoint")
+        client.request(
+            "POST",
+            "/v1/appPriceSchedules",
+            {
+                "data": {
+                    "type": "appPriceSchedules",
+                    "relationships": {
+                        "app": {"data": {"type": "apps", "id": app_id}},
+                        "baseTerritory": {"data": {"type": "territories", "id": "USA"}},
+                        "manualPrices": {"data": [{"type": "appPrices", "id": "${price0}"}]},
+                    },
+                },
+                "included": [
+                    {
+                        "type": "appPrices",
+                        "id": "${price0}",
+                        "attributes": {"startDate": None},
+                        "relationships": {
+                            "appPricePoint": {"data": {"type": "appPricePoints", "id": free_pp}}
+                        },
+                    }
+                ],
+            },
+        )
+        print("Set App Price Schedule: Free ($0.00 USD)")
+
+    # App Global Availability (v2)
+    st_av, cur_av = client.request("GET", f"/v1/apps/{app_id}/appAvailabilityV2?limit=5", allow_statuses=(200, 404))
+    has_avail = st_av == 200 and cur_av.get("data") is not None
+    if not has_avail:
+        included = []
+        rel_list = []
+        for tid in territory_ids:
+            local_id = f"${{terr_{tid}}}"
+            rel_list.append({"type": "territoryAvailabilities", "id": local_id})
+            included.append(
+                {
+                    "type": "territoryAvailabilities",
+                    "id": local_id,
+                    "attributes": {"available": True, "releaseDate": None, "preOrderEnabled": False},
+                    "relationships": {"territory": {"data": {"type": "territories", "id": tid}}},
+                }
+            )
+        client.request(
+            "POST",
+            "/v2/appAvailabilities",
+            {
+                "data": {
+                    "type": "appAvailabilities",
+                    "attributes": {"availableInNewTerritories": True},
+                    "relationships": {
+                        "app": {"data": {"type": "apps", "id": app_id}},
+                        "territoryAvailabilities": {"data": rel_list},
+                    },
+                },
+                "included": included,
+            },
+        )
+        print(f"Set Global App Availability across {len(territory_ids)} territories")
+    else:
+        print(f"App Global Availability already set (id={cur_av['data']['id']})")
+
+    return territory_ids
+
+
+def stage_review_detail(client: ASCClient, version_id: str, review_contact: dict):
+    if not (review_contact.get("email") and review_contact.get("phone")):
+        print("Review contact incomplete; skipping appStoreReviewDetails update.")
+        return
+
+    notes = (
+        "VoxelRay runs 100% on-device with no login or backend server. Hold landscape orientation. "
+        "Tap 3D structures to blast voxel craters (or select Gold/Neon/Glass brushes to build), "
+        "drag to rotate camera, use the bottom-left virtual stick to fly, test Undo and Dawn/Noon/Sunset/Night lighting presets, "
+        "and tap Pro or any locked biome to inspect/purchase the two StoreKit 2 non-consumables "
+        f"({BUNDLE_ID}.pro and {BUNDLE_ID}.materials.crystal)."
+    )
+    attrs = {
+        "contactFirstName": review_contact["first_name"],
+        "contactLastName": review_contact["last_name"],
+        "contactPhone": review_contact["phone"],
+        "contactEmail": review_contact["email"],
+        "demoAccountRequired": False,
+        "notes": notes,
+    }
+    st, cur = client.request("GET", f"/v1/appStoreVersions/{version_id}/appStoreReviewDetail", allow_statuses=(200, 404))
+    if st == 200 and cur.get("data"):
+        client.request(
+            "PATCH",
+            f"/v1/appStoreReviewDetails/{cur['data']['id']}",
+            {"data": {"type": "appStoreReviewDetails", "id": cur["data"]["id"], "attributes": attrs}},
+        )
+        print(f"Updated App Store Review Detail ({cur['data']['id']})")
+    else:
+        _, created = client.request(
+            "POST",
+            "/v1/appStoreReviewDetails",
+            {
+                "data": {
+                    "type": "appStoreReviewDetails",
+                    "attributes": attrs,
+                    "relationships": {
+                        "appStoreVersion": {"data": {"type": "appStoreVersions", "id": version_id}}
+                    },
+                }
+            },
+        )
+        print(f"Created App Store Review Detail ({created['data']['id']})")
+
+
 def stage_screenshots(client: ASCClient, loc_id: str, screenshot_dir: Path):
     pngs = sorted(screenshot_dir.glob("*.png"))
     if len(pngs) < 4:
         raise RuntimeError(f"Expected >=4 PNG screenshots in {screenshot_dir}, found {len(pngs)}")
 
-    _, sets_res = client.request(
-        "GET", f"/v1/appStoreVersionLocalizations/{loc_id}/appScreenshotSets"
-    )
+    _, sets_res = client.request("GET", f"/v1/appStoreVersionLocalizations/{loc_id}/appScreenshotSets")
     existing_sets = {s["attributes"].get("screenshotDisplayType"): s["id"] for s in sets_res.get("data", [])}
 
-    # Try APP_IPHONE_67 (standard 6.7"/6.9" slot) or APP_IPHONE_69 if required by 2868x1320
     chosen_set_id = None
     for display_type in ("APP_IPHONE_67", "APP_IPHONE_69"):
         if display_type in existing_sets:
@@ -320,13 +814,12 @@ def stage_screenshots(client: ASCClient, loc_id: str, screenshot_dir: Path):
                 print(f"Display type {display_type} creation note: {e}")
                 continue
 
-        # Clear any existing screenshots in this set so re-runs are idempotent
         _, old_shots = client.request("GET", f"/v1/appScreenshotSets/{set_id}/appScreenshots")
         for s in old_shots.get("data", []):
             client.request("DELETE", f"/v1/appScreenshots/{s['id']}", allow_statuses=(200, 204, 404))
 
         try:
-            for png in pngs[:4]:
+            for png in pngs[:5]:
                 raw = png.read_bytes()
                 md5_hex = hashlib.md5(raw).hexdigest()
                 _, reserve = client.request(
@@ -358,7 +851,6 @@ def stage_screenshots(client: ASCClient, loc_id: str, screenshot_dir: Path):
                         }
                     },
                 )
-                # Poll until COMPLETE
                 for _ in range(30):
                     _, status_res = client.request("GET", f"/v1/appScreenshots/{shot_id}")
                     st = status_res["data"]["attributes"].get("assetDeliveryState", {}).get("state")
@@ -385,7 +877,9 @@ def stage_iap(
     reference_name: str,
     display_name: str,
     description: str,
+    usd_price: str,
     review_screenshot: Path,
+    territory_ids: list[str],
 ):
     _, existing = client.request("GET", f"/v1/apps/{app_id}/inAppPurchasesV2?limit=50")
     iap_id = None
@@ -406,7 +900,7 @@ def stage_iap(
                         "productId": product_id,
                         "inAppPurchaseType": "NON_CONSUMABLE",
                         "familySharable": True,
-                        "reviewNote": "Local StoreKit 2 non-consumable unlock tested on-device.",
+                        "reviewNote": "Local StoreKit 2 non-consumable unlock verified on-device.",
                     },
                     "relationships": {
                         "app": {"data": {"type": "apps", "id": app_id}}
@@ -420,11 +914,10 @@ def stage_iap(
         print(f"IAP draft already exists: {product_id} (id={iap_id})")
 
     _, locs = client.request("GET", f"/v2/inAppPurchases/{iap_id}/inAppPurchaseLocalizations")
-    loc_id = None
-    for l in locs.get("data", []):
-        if l["attributes"].get("locale") == "en-US":
-            loc_id = l["id"]
-            break
+    loc_id = next(
+        (l["id"] for l in locs.get("data", []) if l["attributes"].get("locale") == "en-US"),
+        None,
+    )
     if loc_id:
         client.request(
             "PATCH",
@@ -452,6 +945,74 @@ def stage_iap(
             },
         )
 
+    # Global IAP availability
+    st_av, cur_av = client.request(
+        "GET",
+        f"/v2/inAppPurchases/{iap_id}/inAppPurchaseAvailability",
+        allow_statuses=(200, 404),
+    )
+    if st_av != 200 or not cur_av.get("data"):
+        client.request(
+            "POST",
+            "/v1/inAppPurchaseAvailabilities",
+            {
+                "data": {
+                    "type": "inAppPurchaseAvailabilities",
+                    "attributes": {"availableInNewTerritories": True},
+                    "relationships": {
+                        "inAppPurchase": {"data": {"type": "inAppPurchases", "id": iap_id}},
+                        "availableTerritories": {
+                            "data": [{"type": "territories", "id": t} for t in territory_ids]
+                        },
+                    },
+                }
+            },
+        )
+        print(f"  Set global availability for IAP {product_id}")
+
+    # IAP USA price schedule
+    st_ps, cur_ps = client.request(
+        "GET",
+        f"/v2/inAppPurchases/{iap_id}/iapPriceSchedule",
+        allow_statuses=(200, 404),
+    )
+    if st_ps != 200 or not cur_ps.get("data"):
+        pps = client.get_paginated(f"/v2/inAppPurchases/{iap_id}/pricePoints?filter[territory]=USA&limit=200")
+        target_pp = next(
+            (p["id"] for p in pps if f"{float(p['attributes'].get('customerPrice', -1)):.2f}" == usd_price),
+            None,
+        )
+        if not target_pp:
+            raise RuntimeError(f"USA price point {usd_price} not found for IAP {product_id}")
+        client.request(
+            "POST",
+            "/v1/inAppPurchasePriceSchedules",
+            {
+                "data": {
+                    "type": "inAppPurchasePriceSchedules",
+                    "relationships": {
+                        "inAppPurchase": {"data": {"type": "inAppPurchases", "id": iap_id}},
+                        "baseTerritory": {"data": {"type": "territories", "id": "USA"}},
+                        "manualPrices": {"data": [{"type": "inAppPurchasePrices", "id": "${price0}"}]},
+                    },
+                },
+                "included": [
+                    {
+                        "type": "inAppPurchasePrices",
+                        "id": "${price0}",
+                        "attributes": {"startDate": None},
+                        "relationships": {
+                            "inAppPurchaseV2": {"data": {"type": "inAppPurchases", "id": iap_id}},
+                            "inAppPurchasePricePoint": {
+                                "data": {"type": "inAppPurchasePricePoints", "id": target_pp}
+                            },
+                        },
+                    }
+                ],
+            },
+        )
+        print(f"  Set USD ${usd_price} price schedule for IAP {product_id}")
+
     # Ensure IAP review screenshot is attached
     _, cur_rev = client.request(
         "GET",
@@ -461,9 +1022,9 @@ def stage_iap(
     has_complete = False
     if isinstance(cur_rev, dict) and cur_rev.get("data"):
         st = cur_rev["data"]["attributes"].get("assetDeliveryState", {}).get("state")
-        if st == "COMPLETE":
-            has_complete = True
-        else:
+        if st in ("COMPLETE", "AWAITING_UPLOAD", "UPLOAD_COMPLETE"):
+            has_complete = (st == "COMPLETE")
+        if not has_complete:
             old_id = cur_rev["data"]["id"]
             client.request(
                 "DELETE",
@@ -502,12 +1063,16 @@ def stage_iap(
         )
         print(f"  Attached review screenshot to IAP {product_id}")
 
+    _, final_iap = client.request("GET", f"/v2/inAppPurchases/{iap_id}")
+    print(f"ASC_IAP_STATE[{product_id}]={final_iap['data']['attributes'].get('state')} (id={iap_id})")
+
 
 def stage_draft(client: ASCClient, build_number: str):
     app = find_app(client)
     if app is None:
         raise RuntimeError(f"App record not found for {BUNDLE_ID}")
     app_id = app["id"]
+    review_contact = load_review_contact()
 
     build = wait_for_valid_build(client, app_id, build_number)
     build_id = build["id"]
@@ -528,35 +1093,12 @@ def stage_draft(client: ASCClient, build_number: str):
         )
         print("Set build usesNonExemptEncryption = false")
 
-    # Find or create iOS 1.0.0 App Store Version
-    _, vers = client.request(
-        "GET",
-        f"/v1/apps/{app_id}/appStoreVersions?filter[platform]=IOS&filter[versionString]={VERSION_STRING}",
-    )
-    if vers.get("data"):
-        version = vers["data"][0]
-    else:
-        _, created_ver = client.request(
-            "POST",
-            "/v1/appStoreVersions",
-            {
-                "data": {
-                    "type": "appStoreVersions",
-                    "attributes": {
-                        "platform": "IOS",
-                        "versionString": VERSION_STRING,
-                        "releaseType": "MANUAL",
-                        "copyright": "2026 VoxelRay",
-                    },
-                    "relationships": {"app": {"data": {"type": "apps", "id": app_id}}},
-                }
-            },
-        )
-        version = created_ver["data"]
+    # Find existing draft version ("1.0" / "1.0.0") or create it, and set "1.0.0"
+    version = find_or_update_ios_version(client, app_id)
     version_id = version["id"]
     print(f"ASC_VERSION_ID={version_id}")
 
-    # Attach build
+    # Attach build to App Store Version
     client.request(
         "PATCH",
         f"/v1/appStoreVersions/{version_id}/relationships/build",
@@ -564,13 +1106,22 @@ def stage_draft(client: ASCClient, build_number: str):
     )
     print(f"Attached build {build_id} to version {VERSION_STRING}")
 
+    # Stage TestFlight internal testing
+    stage_testflight_internal(client, app_id, build_id, review_contact)
+
     # Version localization (en-US)
     _, vlocs = client.request("GET", f"/v1/appStoreVersions/{version_id}/appStoreVersionLocalizations")
-    vloc_id = None
-    for l in vlocs.get("data", []):
-        if l["attributes"].get("locale") == "en-US":
-            vloc_id = l["id"]
-            break
+    vloc_id = next(
+        (l["id"] for l in vlocs.get("data", []) if l["attributes"].get("locale") == "en-US"),
+        None,
+    )
+    vloc_attrs = {
+        "description": DESCRIPTION,
+        "promotionalText": PROMO_TEXT,
+        "keywords": KEYWORDS,
+        "supportUrl": SUPPORT_URL,
+        "marketingUrl": MARKETING_URL,
+    }
     if vloc_id:
         client.request(
             "PATCH",
@@ -579,13 +1130,7 @@ def stage_draft(client: ASCClient, build_number: str):
                 "data": {
                     "type": "appStoreVersionLocalizations",
                     "id": vloc_id,
-                    "attributes": {
-                        "description": DESCRIPTION,
-                        "promotionalText": PROMO_TEXT,
-                        "keywords": KEYWORDS,
-                        "supportUrl": SUPPORT_URL,
-                        "marketingUrl": MARKETING_URL,
-                    },
+                    "attributes": vloc_attrs,
                 }
             },
         )
@@ -596,14 +1141,7 @@ def stage_draft(client: ASCClient, build_number: str):
             {
                 "data": {
                     "type": "appStoreVersionLocalizations",
-                    "attributes": {
-                        "locale": "en-US",
-                        "description": DESCRIPTION,
-                        "promotionalText": PROMO_TEXT,
-                        "keywords": KEYWORDS,
-                        "supportUrl": SUPPORT_URL,
-                        "marketingUrl": MARKETING_URL,
-                    },
+                    "attributes": {"locale": "en-US", **vloc_attrs},
                     "relationships": {
                         "appStoreVersion": {"data": {"type": "appStoreVersions", "id": version_id}}
                     },
@@ -613,16 +1151,15 @@ def stage_draft(client: ASCClient, build_number: str):
         vloc_id = created_vloc["data"]["id"]
     print(f"Updated en-US version localization ({vloc_id})")
 
-    # App Info (privacyPolicyUrl + primary category)
+    # App Info (privacyPolicyUrl, subtitle, categories, Content Rights, Age Rating)
     _, app_infos = client.request("GET", f"/v1/apps/{app_id}/appInfos")
     if app_infos.get("data"):
         app_info_id = app_infos["data"][0]["id"]
         _, ailocs = client.request("GET", f"/v1/appInfos/{app_info_id}/appInfoLocalizations")
-        ailoc_id = None
-        for l in ailocs.get("data", []):
-            if l["attributes"].get("locale") == "en-US":
-                ailoc_id = l["id"]
-                break
+        ailoc_id = next(
+            (l["id"] for l in ailocs.get("data", []) if l["attributes"].get("locale") == "en-US"),
+            None,
+        )
         if ailoc_id:
             client.request(
                 "PATCH",
@@ -638,32 +1175,44 @@ def stage_draft(client: ASCClient, build_number: str):
                     }
                 },
             )
-        for cat_id in ("GAMES", "ENTERTAINMENT"):
+
+        category_set = False
+        for rels in (
+            {
+                "primaryCategory": {"data": {"type": "appCategories", "id": "GAMES"}},
+                "primarySubcategoryOne": {"data": {"type": "appCategories", "id": "GAMES_SIMULATION"}},
+            },
+            {"primaryCategory": {"data": {"type": "appCategories", "id": "GAMES"}}},
+            {"primaryCategory": {"data": {"type": "appCategories", "id": "ENTERTAINMENT"}}},
+        ):
             try:
                 client.request(
                     "PATCH",
                     f"/v1/appInfos/{app_info_id}",
-                    {
-                        "data": {
-                            "type": "appInfos",
-                            "id": app_info_id,
-                            "relationships": {
-                                "primaryCategory": {"data": {"type": "appCategories", "id": cat_id}}
-                            },
-                        }
-                    },
+                    {"data": {"type": "appInfos", "id": app_info_id, "relationships": rels}},
                 )
-                print(f"Set primary category: {cat_id}")
+                print(f"Set categories: {list(rels.keys())}")
+                category_set = True
                 break
             except ASCHTTPError as e:
-                print(f"Category {cat_id} note: {e}")
+                print(f"Category attempt note: {e}")
+        if not category_set:
+            print("Warning: Could not update primaryCategory via API")
 
-    # Upload 6.9" landscape screenshots
+        stage_content_rights_and_age_rating(client, app_id, app_info_id)
+
+    territory_ids = stage_pricing_and_availability(client, app_id)
+    stage_review_detail(client, version_id, review_contact)
+
+    # Upload 6.9" landscape screenshots (all 5 verified PNGs)
     shot_dir = Path("artifacts/screenshots")
     stage_screenshots(client, vloc_id, shot_dir)
 
-    # Stage both Non-Consumable IAPs
-    paywall_shot = shot_dir / "04_glass_cathedral_paywall.png"
+    # Stage both Non-Consumable IAPs with availability + pricing + screenshot
+    paywall_shot = shot_dir / "05_studio_paywall.png"
+    if not paywall_shot.exists():
+        paywall_shot = shot_dir / "04_glass_cathedral_paywall.png"
+
     stage_iap(
         client,
         app_id=app_id,
@@ -671,7 +1220,9 @@ def stage_draft(client: ASCClient, build_number: str):
         reference_name="Architect Pro",
         display_name="Architect Pro",
         description="Unlock Neon Cavern & Glass Cathedral biomes and watermark-free 4K Photo Mode.",
+        usd_price="4.99",
         review_screenshot=paywall_shot,
+        territory_ids=territory_ids,
     )
     stage_iap(
         client,
@@ -680,7 +1231,9 @@ def stage_draft(client: ASCClient, build_number: str):
         reference_name="Prism Material Pack",
         display_name="Prism Material Pack",
         description="Unlock the refractive Prism Crystal brush for sculpting glowing glass voxels.",
+        usd_price="1.99",
         review_screenshot=paywall_shot,
+        territory_ids=territory_ids,
     )
 
     # Final assertion: PREPARE_FOR_SUBMISSION Draft state (HARD STOP)
@@ -689,14 +1242,14 @@ def stage_draft(client: ASCClient, build_number: str):
     print(f"FINAL_APP_STORE_STATE={state}")
     if state != "PREPARE_FOR_SUBMISSION":
         raise RuntimeError(f"Expected PREPARE_FOR_SUBMISSION, got {state}")
-    print("App Store Connect 1.0.0 Draft staged cleanly. HARD STOP (not submitted).")
+    print("App Store Connect 1.0.0 Draft + TestFlight staged cleanly. HARD STOP (not submitted).")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Stage VoxelRay 1.0.0 Draft in App Store Connect")
+    parser = argparse.ArgumentParser(description="Stage VoxelRay 1.0.0 Draft & TestFlight in App Store Connect")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--prepare-app", action="store_true", help="Ensure Bundle ID & App record exist")
-    group.add_argument("--stage-draft", action="store_true", help="Attach build, metadata, screenshots, IAPs")
+    group.add_argument("--stage-draft", action="store_true", help="Attach build, TestFlight, checks, screenshots, IAPs")
     parser.add_argument("--build-number", help="CFBundleVersion uploaded to ASC")
     args = parser.parse_args()
 

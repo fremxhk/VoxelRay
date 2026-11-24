@@ -1,15 +1,17 @@
-#if targetEnvironment(simulator)
 import Foundation
 import Metal
 import QuartzCore
 
-/// iOS Simulator Metal compute pipeline executing 3D Amanatides-Woo DDA voxel ray tracing.
-final class SimulatorComputePipeline {
+/// Cross-platform Metal compute path-tracing pipeline (3D Amanatides-Woo DDA + 13-tap HDR bloom).
+/// Used on iOS Simulator and as a rock-solid full-featured compute fallback on physical iPhones
+/// when Metal 4 hardware command queues (e.g. A15 iPhone 13) are unavailable.
+final class ComputePathTracePipeline {
     let device: MTLDevice
     let commandQueue: MTLCommandQueue
 
     private let smokePipeline: MTLComputePipelineState
     private let rayTracePipeline: MTLComputePipelineState
+    private let bloomTonemapPipeline: MTLComputePipelineState
     private let parityPipeline: MTLComputePipelineState
 
     private let voxelBuffer: MTLBuffer
@@ -18,35 +20,41 @@ final class SimulatorComputePipeline {
     private var accumTextures: [MTLTexture] = []
     private var accumSize: (Int, Int) = (0, 0)
     private var accumFlip: Int = 0
+    private var hdrTexture: MTLTexture?
+    private var hdrSize: (Int, Int) = (0, 0)
 
     private var offscreenAccumTextures: [MTLTexture] = []
     private var offscreenAccumSize: (Int, Int) = (0, 0)
     private var offscreenFlip: Int = 0
+    private var offscreenHDRTexture: MTLTexture?
+    private var offscreenHDRSize: (Int, Int) = (0, 0)
 
     init?(device: MTLDevice, library: MTLLibrary) {
         guard let queue = device.makeCommandQueue(),
               let smokeFn = library.makeFunction(name: "rayDirSmokeKernel"),
               let rtFn = library.makeFunction(name: "simulatorPathTraceKernel"),
+              let bloomFn = library.makeFunction(name: "bloomTonemapPresentKernel"),
               let parityFn = library.makeFunction(name: "raycastParityKernel"),
               let voxBuf = device.makeBuffer(length: VoxelWorld.voxelCount, options: .storageModeShared)
         else {
-            NSLog("SimulatorComputePipeline init failed: missing queue/functions/voxelBuffer")
+            NSLog("ComputePathTracePipeline init failed: missing queue/functions/voxelBuffer")
             return nil
         }
 
         do {
             self.smokePipeline = try device.makeComputePipelineState(function: smokeFn)
             self.rayTracePipeline = try device.makeComputePipelineState(function: rtFn)
+            self.bloomTonemapPipeline = try device.makeComputePipelineState(function: bloomFn)
             self.parityPipeline = try device.makeComputePipelineState(function: parityFn)
         } catch {
-            NSLog("SimulatorComputePipeline pipeline creation failed: \(error)")
+            NSLog("ComputePathTracePipeline pipeline creation failed: \(error)")
             return nil
         }
 
         self.device = device
         self.commandQueue = queue
         self.voxelBuffer = voxBuf
-        self.voxelBuffer.label = "SimVoxelGridBuffer"
+        self.voxelBuffer.label = "ComputeVoxelGridBuffer"
     }
 
     func syncWorldIfNeeded(_ world: VoxelWorld) {
@@ -89,23 +97,57 @@ final class SimulatorComputePipeline {
         return (t0, t1)
     }
 
+    private func ensureHDRTexture(
+        current: inout MTLTexture?,
+        currentSize: inout (Int, Int),
+        width: Int,
+        height: Int,
+        label: String
+    ) -> MTLTexture? {
+        if let tex = current, currentSize.0 == width && currentSize.1 == height {
+            return tex
+        }
+        let desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rgba16Float,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        desc.storageMode = .private
+        desc.usage = [.shaderRead, .shaderWrite]
+        let created = device.makeTexture(descriptor: desc)
+        created?.label = label
+        current = created
+        currentSize = (width, height)
+        return created
+    }
+
     func encodeDisplayFrame(
         world: VoxelWorld,
         uniformRingBuffer: MTLBuffer,
         uniformOffset: Int,
         drawable: CAMetalDrawable,
         displayTarget: MTLTexture,
-        width: Int,
-        height: Int,
+        internalWidth: Int,
+        internalHeight: Int,
+        outputWidth: Int,
+        outputHeight: Int,
         frameSemaphore: DispatchSemaphore
     ) {
         syncWorldIfNeeded(world)
         guard let (a0, a1) = ensurePingPongTextures(
             current: &accumTextures,
             currentSize: &accumSize,
-            width: width,
-            height: height,
-            labelPrefix: "SimAccum"
+            width: internalWidth,
+            height: internalHeight,
+            labelPrefix: "ComputeAccum"
+        ),
+        let hdrTex = ensureHDRTexture(
+            current: &hdrTexture,
+            currentSize: &hdrSize,
+            width: internalWidth,
+            height: internalHeight,
+            label: "ComputeHDR"
         ),
         let commandBuffer = commandQueue.makeCommandBuffer()
         else {
@@ -118,25 +160,35 @@ final class SimulatorComputePipeline {
         accumFlip = 1 - accumFlip
 
         if let encoder = commandBuffer.makeComputeCommandEncoder() {
-            encoder.label = "SimVoxelPathTracePass"
+            encoder.label = "ComputeVoxelPathTracePass"
             encoder.setComputePipelineState(rayTracePipeline)
             encoder.setBuffer(uniformRingBuffer, offset: uniformOffset, index: 0)
             encoder.setBuffer(voxelBuffer, offset: 0, index: 1)
             encoder.setTexture(readTex, index: 0)
             encoder.setTexture(writeTex, index: 1)
-            encoder.setTexture(displayTarget, index: 2)
-            Renderer.dispatch2D(encoder: encoder, pipeline: rayTracePipeline, width: width, height: height)
+            encoder.setTexture(hdrTex, index: 2)
+            Renderer.dispatch2D(encoder: encoder, pipeline: rayTracePipeline, width: internalWidth, height: internalHeight)
             encoder.endEncoding()
         }
 
+        if let postEncoder = commandBuffer.makeComputeCommandEncoder() {
+            postEncoder.label = "ComputeBloomTonemapPass"
+            postEncoder.setComputePipelineState(bloomTonemapPipeline)
+            postEncoder.setBuffer(uniformRingBuffer, offset: uniformOffset, index: 0)
+            postEncoder.setTexture(hdrTex, index: 0)
+            postEncoder.setTexture(displayTarget, index: 1)
+            Renderer.dispatch2D(encoder: postEncoder, pipeline: bloomTonemapPipeline, width: outputWidth, height: outputHeight)
+            postEncoder.endEncoding()
+        }
+
         if let blit = commandBuffer.makeBlitCommandEncoder() {
-            blit.label = "SimPresentBlit"
+            blit.label = "ComputePresentBlit"
             blit.copy(
                 from: displayTarget,
                 sourceSlice: 0,
                 sourceLevel: 0,
                 sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
-                sourceSize: MTLSize(width: width, height: height, depth: 1),
+                sourceSize: MTLSize(width: outputWidth, height: outputHeight, depth: 1),
                 to: drawable.texture,
                 destinationSlice: 0,
                 destinationLevel: 0,
@@ -182,7 +234,14 @@ final class SimulatorComputePipeline {
                 currentSize: &offscreenAccumSize,
                 width: width,
                 height: height,
-                labelPrefix: "SimOffscreenAccum"
+                labelPrefix: "ComputeOffscreenAccum"
+              ),
+              let hdrTex = ensureHDRTexture(
+                current: &offscreenHDRTexture,
+                currentSize: &offscreenHDRSize,
+                width: width,
+                height: height,
+                label: "ComputeOffscreenHDR"
               )
         else {
             return []
@@ -212,10 +271,19 @@ final class SimulatorComputePipeline {
                     encoder.setBuffer(voxelBuffer, offset: 0, index: 1)
                     encoder.setTexture(readTex, index: 0)
                     encoder.setTexture(writeTex, index: 1)
-                    encoder.setTexture(privateTarget, index: 2)
+                    encoder.setTexture(hdrTex, index: 2)
                     Renderer.dispatch2D(encoder: encoder, pipeline: rayTracePipeline, width: width, height: height)
                 }
                 encoder.endEncoding()
+            }
+
+            if !smokeOnly && s == count - 1, let postEncoder = commandBuffer.makeComputeCommandEncoder() {
+                postEncoder.setComputePipelineState(bloomTonemapPipeline)
+                postEncoder.setBuffer(uniformRingBuffer, offset: offset, index: 0)
+                postEncoder.setTexture(hdrTex, index: 0)
+                postEncoder.setTexture(privateTarget, index: 1)
+                Renderer.dispatch2D(encoder: postEncoder, pipeline: bloomTonemapPipeline, width: width, height: height)
+                postEncoder.endEncoding()
             }
 
             if s == count - 1, let blit = commandBuffer.makeBlitCommandEncoder() {
@@ -291,4 +359,5 @@ final class SimulatorComputePipeline {
         return Array(UnsafeBufferPointer(start: rPtr, count: rays.count))
     }
 }
-#endif
+
+typealias SimulatorComputePipeline = ComputePathTracePipeline

@@ -72,74 +72,171 @@ inline MaterialProps getMaterialProps(uint matId, float3 worldPos) {
 
     switch (matId) {
         case MAT_TRAVERTINE:
-            m.albedo = float3(0.89f, 0.83f, 0.72f) * micro;
-            m.roughness = 0.88f;
+            m.albedo = float3(0.84f, 0.77f, 0.66f) * micro;
+            m.roughness = 0.86f;
             break;
         case MAT_TERRACOTTA:
-            m.albedo = float3(0.76f, 0.36f, 0.22f) * micro;
-            m.roughness = 0.82f;
+            m.albedo = float3(0.75f, 0.34f, 0.21f) * micro;
+            m.roughness = 0.80f;
             break;
         case MAT_MOSS:
-            m.albedo = float3(0.22f, 0.50f, 0.24f) * micro;
-            m.roughness = 0.92f;
+            m.albedo = float3(0.20f, 0.52f, 0.23f) * micro;
+            m.roughness = 0.90f;
             break;
         case MAT_BASALT:
-            m.albedo = float3(0.11f, 0.12f, 0.15f) * micro;
-            m.roughness = 0.78f;
+            m.albedo = float3(0.13f, 0.14f, 0.18f) * micro;
+            m.roughness = 0.74f;
             break;
         case MAT_GOLD:
-            m.albedo = float3(0.96f, 0.76f, 0.32f);
-            m.roughness = 0.18f;
+            m.albedo = float3(0.98f, 0.78f, 0.30f);
+            m.roughness = 0.16f;
             m.metallic = 1.0f;
             break;
         case MAT_CHROME:
-            m.albedo = float3(0.86f, 0.89f, 0.94f);
-            m.roughness = 0.10f;
+            m.albedo = float3(0.88f, 0.92f, 0.97f);
+            m.roughness = 0.08f;
             m.metallic = 1.0f;
             break;
         case MAT_GLASS:
-            m.albedo = float3(0.92f, 0.97f, 1.0f);
-            m.roughness = 0.04f;
+            m.albedo = float3(0.86f, 0.95f, 1.0f);
+            m.roughness = 0.03f;
             m.transmission = 0.92f;
             m.ior = 1.50f;
-            m.absorption = float3(0.04f, 0.015f, 0.01f);
+            m.absorption = float3(0.03f, 0.01f, 0.008f);
             break;
         case MAT_WATER:
-            m.albedo = float3(0.32f, 0.74f, 0.88f);
-            m.roughness = 0.05f;
-            m.transmission = 0.82f;
+            m.albedo = float3(0.16f, 0.72f, 0.84f);
+            m.roughness = 0.04f;
+            m.transmission = 0.84f;
             m.ior = 1.333f;
-            m.absorption = float3(0.22f, 0.06f, 0.03f);
+            m.absorption = float3(0.16f, 0.04f, 0.02f);
             break;
         case MAT_NEON_CYAN:
-            m.albedo = float3(0.15f, 0.95f, 1.0f);
-            m.emissive = float3(0.25f, 3.6f, 4.4f);
-            m.roughness = 0.3f;
+            m.albedo = float3(0.15f, 0.96f, 1.0f);
+            m.emissive = float3(0.22f, 2.95f, 3.65f);
+            m.roughness = 0.25f;
             break;
         case MAT_NEON_MAGENTA:
-            m.albedo = float3(1.0f, 0.18f, 0.75f);
-            m.emissive = float3(4.2f, 0.35f, 2.8f);
-            m.roughness = 0.3f;
+            m.albedo = float3(1.0f, 0.20f, 0.78f);
+            m.emissive = float3(3.55f, 0.28f, 2.35f);
+            m.roughness = 0.25f;
             break;
         case MAT_AMBER_LANTERN:
-            m.albedo = float3(1.0f, 0.72f, 0.25f);
-            m.emissive = float3(4.0f, 2.2f, 0.55f);
-            m.roughness = 0.35f;
+            m.albedo = float3(1.0f, 0.74f, 0.28f);
+            m.emissive = float3(3.25f, 1.85f, 0.48f);
+            m.roughness = 0.30f;
             break;
         case MAT_PRISM_CRYSTAL: {
-            float3 prismTint = 0.55f + 0.45f * cos(float3(0.0f, 2.1f, 4.2f) + dot(floor(worldPos), float3(0.35f)));
-            m.albedo = mix(float3(0.75f, 0.92f, 1.0f), prismTint, 0.45f);
-            m.emissive = prismTint * 0.45f;
-            m.roughness = 0.03f;
-            m.transmission = 0.88f;
-            m.ior = 1.75f;
-            m.absorption = float3(0.05f, 0.02f, 0.03f);
+            float3 prismTint = 0.55f + 0.45f * cos(float3(0.0f, 2.1f, 4.2f) + dot(floor(worldPos), float3(0.42f, 0.27f, 0.35f)));
+            m.albedo = mix(float3(0.72f, 0.92f, 1.0f), prismTint, 0.55f);
+            m.emissive = prismTint * 0.62f;
+            m.roughness = 0.02f;
+            m.transmission = 0.90f;
+            m.ior = 1.65f;
+            m.absorption = float3(0.04f, 0.015f, 0.02f);
             break;
         }
         default:
             break;
     }
     return m;
+}
+
+inline int isSolidNeighbor(int3 coord, const device uint8_t* voxels) {
+    if (!inGridBounds(coord.x, coord.y, coord.z)) {
+        return 0;
+    }
+    uint m = uint(voxels[voxelIndex(coord.x, coord.y, coord.z)]);
+    return (m != MAT_AIR && m != MAT_WATER && m != MAT_GLASS) ? 1 : 0;
+}
+
+/// Evaluates soft corner ambient occlusion and subtle machined block bevel highlight.
+inline float2 evaluateVoxelAOAndBevel(
+    float3 hitPos,
+    float3 normal,
+    int3 voxelCoord,
+    const device uint8_t* voxels
+) {
+    int3 nInt = int3(round(normal));
+    int3 ext = voxelCoord + nInt;
+    float3 local = clamp(hitPos - float3(voxelCoord), 0.0f, 1.0f);
+
+    float u = 0.5f;
+    float v = 0.5f;
+    int3 t1 = int3(1, 0, 0);
+    int3 t2 = int3(0, 1, 0);
+
+    if (abs(nInt.x) > 0) {
+        u = local.y;
+        v = local.z;
+        t1 = int3(0, 1, 0);
+        t2 = int3(0, 0, 1);
+    } else if (abs(nInt.y) > 0) {
+        u = local.x;
+        v = local.z;
+        t1 = int3(1, 0, 0);
+        t2 = int3(0, 0, 1);
+    } else {
+        u = local.x;
+        v = local.y;
+        t1 = int3(1, 0, 0);
+        t2 = int3(0, 1, 0);
+    }
+
+    int sP1 = isSolidNeighbor(ext + t1, voxels);
+    int sN1 = isSolidNeighbor(ext - t1, voxels);
+    int sP2 = isSolidNeighbor(ext + t2, voxels);
+    int sN2 = isSolidNeighbor(ext - t2, voxels);
+
+    float occ = 0.0f;
+    if (sP1 != 0) occ += 0.34f * pow(u, 1.6f);
+    if (sN1 != 0) occ += 0.34f * pow(1.0f - u, 1.6f);
+    if (sP2 != 0) occ += 0.34f * pow(v, 1.6f);
+    if (sN2 != 0) occ += 0.34f * pow(1.0f - v, 1.6f);
+
+    if (isSolidNeighbor(ext + t1 + t2, voxels) != 0) occ += 0.16f * pow(u * v, 1.5f);
+    if (isSolidNeighbor(ext - t1 + t2, voxels) != 0) occ += 0.16f * pow((1.0f - u) * v, 1.5f);
+    if (isSolidNeighbor(ext + t1 - t2, voxels) != 0) occ += 0.16f * pow(u * (1.0f - v), 1.5f);
+    if (isSolidNeighbor(ext - t1 - t2, voxels) != 0) occ += 0.16f * pow((1.0f - u) * (1.0f - v), 1.5f);
+
+    float ao = clamp(1.0f - occ, 0.38f, 1.0f);
+
+    // Subtle sunlit seam & outer bevel accent on exposed edges
+    float edgeU = abs(u - 0.5f);
+    float edgeV = abs(v - 0.5f);
+    float bevelMask = max(
+        (sP1 == 0 && u > 0.88f) || (sN1 == 0 && u < 0.12f) ? smoothstep(0.41f, 0.495f, edgeU) : 0.0f,
+        (sP2 == 0 && v > 0.88f) || (sN2 == 0 && v < 0.12f) ? smoothstep(0.41f, 0.495f, edgeV) : 0.0f
+    );
+    return float2(ao, bevelMask * 0.11f);
+}
+
+inline float3 evaluateWaterRippleNormal(float3 hitPos, float timeSec, float3 baseNormal) {
+    if (fabs(baseNormal.y) < 0.5f) {
+        return baseNormal;
+    }
+    float dx = 0.042f * cos(hitPos.x * 2.15f + timeSec * 2.3f + sin(hitPos.z * 1.4f - timeSec * 1.2f))
+             + 0.022f * cos((hitPos.x + hitPos.z) * 3.1f - timeSec * 2.8f);
+    float dz = -0.042f * sin(hitPos.z * 2.45f - timeSec * 2.0f + cos(hitPos.x * 1.3f + timeSec * 1.1f))
+             + 0.022f * sin((hitPos.z - hitPos.x) * 2.9f + timeSec * 2.5f);
+    return normalize(float3(dx, baseNormal.y >= 0.0f ? 1.0f : -1.0f, dz));
+}
+
+inline float3 evaluateBlastDynamicLight(float3 hitPos, float3 normal, constant FrameUniforms& u) {
+    float intensity = u.extra0.w;
+    if (intensity <= 1e-4f) {
+        return float3(0.0f);
+    }
+    float3 delta = u.extra0.xyz - hitPos;
+    float distSq = dot(delta, delta);
+    float dist = sqrt(max(distSq, 1e-4f));
+    float3 lDir = delta / dist;
+    float atten = 1.0f / (1.0f + 0.075f * distSq);
+    float wrap = clamp((dot(normal, lDir) + 0.35f) / 1.35f, 0.0f, 1.0f);
+    float shockR = u.extra1.w;
+    float ringDelta = fabs(dist - shockR);
+    float ring = (shockR > 0.05f) ? exp(-ringDelta * ringDelta * 3.8f) * 1.35f : 0.0f;
+    return u.extra1.xyz * intensity * (atten * wrap * 5.8f + ring);
 }
 
 inline float3 computePrimaryRayDir(uint2 gid, uint2 dims, float2 jitter, constant FrameUniforms& u) {

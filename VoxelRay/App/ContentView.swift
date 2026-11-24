@@ -20,9 +20,13 @@ struct ContentView: View {
                 isCrystalUnlocked: store.isCrystalPackUnlocked,
                 onSelectBiome: { biome in
                     if biome.requiresPro && !store.isProUnlocked {
-                        showPaywall = true
+                        if renderer.previewBiome == biome {
+                            showPaywall = true
+                        } else {
+                            renderer.selectBiome(biome, isPreview: true)
+                        }
                     } else {
-                        renderer.selectBiome(biome)
+                        renderer.selectBiome(biome, isPreview: false)
                     }
                 },
                 onSelectCrystalBrush: {
@@ -39,8 +43,30 @@ struct ContentView: View {
         }
         .statusBarHidden(true)
         .preferredColorScheme(.dark)
-        .sheet(isPresented: $showPaywall) {
+        .onAppear {
+            renderer.onPreviewUpgradeRequested = {
+                showPaywall = true
+            }
+        }
+        .onChange(of: store.isProUnlocked) { _, unlocked in
+            if unlocked {
+                renderer.clearPreviewBanner()
+                renderer.sound.playUnlockFanfare()
+            }
+        }
+        .onChange(of: store.isCrystalPackUnlocked) { _, unlocked in
+            if unlocked {
+                renderer.sound.playUnlockFanfare()
+            }
+        }
+        .sheet(isPresented: $showPaywall, onDismiss: {
+            if !store.isProUnlocked && renderer.activeBiome.requiresPro {
+                renderer.clearPreviewBanner()
+                renderer.selectBiome(.sunlitCourtyard)
+            }
+        }) {
             PaywallView(store: store)
+                .presentationBackground(.ultraThinMaterial)
         }
         .sheet(isPresented: $renderer.showShareSheet) {
             if let img = renderer.capturedPhotoImage {

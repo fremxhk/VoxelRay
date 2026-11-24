@@ -23,9 +23,9 @@ typedef struct {
     simd_uint4  renderParams;       // x: frameIndex, y: maxBounces, z: renderMode, w: flags
     simd_float4 resolutionAndTime;  // x: internalW, y: internalH, z: outputW, w: timeSec
     simd_float4 outputAndExposure;  // x: outputH, y: exposure, z: waterLevel, w: fireflyClamp
-    simd_float4 extra0;             // reserved / brush highlight xyz, radius w
-    simd_float4 extra1;             // reserved
-    simd_float4 extra2;             // reserved
+    simd_float4 extra0;             // xyz: blastFlashPos, w: blastFlashIntensity (0..1)
+    simd_float4 extra1;             // xyz: blastFlashColor, w: shockwaveRadius
+    simd_float4 extra2;             // x: bloomIntensity, y: vignetteStrength, z: modeFlags, w: reserved
 } FrameUniforms;
 
 typedef struct {

@@ -22,44 +22,57 @@ final class ScreenshotCaptureUITests: XCTestCase {
         let outDir = URL(fileURLWithPath: outDirPath, isDirectory: true)
         try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
 
-        // 1. Sunlit Courtyard (converged)
-        Thread.sleep(forTimeInterval: 2.5)
+        // Clean stale PNGs before fresh capture
+        if let existing = try? FileManager.default.contentsOfDirectory(at: outDir, includingPropertiesForKeys: nil) {
+            for item in existing where item.pathExtension.lowercased() == "png" {
+                try? FileManager.default.removeItem(at: item)
+            }
+        }
+
+        // 1. Sunlit Courtyard (converged with arches + reflective water basin)
+        Thread.sleep(forTimeInterval: 2.6)
         try captureAndSave(name: "01_sunlit_courtyard.png", dir: outDir)
 
-        // 2. Destructible Voxels (carved + dramatic sun angle)
+        // 2. Destructible Voxels + Creative Neon Sculpting + Sunset lighting
         let blastSlider = app.sliders["hud.slider.blastRadius"]
         if blastSlider.waitForExistence(timeout: 4.0) {
-            blastSlider.adjust(toNormalizedSliderPosition: 0.85)
+            blastSlider.adjust(toNormalizedSliderPosition: 0.76)
         }
-        let sunSlider = app.sliders["hud.slider.sunElevation"]
-        if sunSlider.waitForExistence(timeout: 4.0) {
-            sunSlider.adjust(toNormalizedSliderPosition: 0.25)
+        let sunsetBtn = app.buttons["hud.time.sunset"]
+        if sunsetBtn.waitForExistence(timeout: 4.0) {
+            sunsetBtn.tap()
         }
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.48, dy: 0.50)).tap()
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.54, dy: 0.47)).tap()
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.44, dy: 0.55)).tap()
-        Thread.sleep(forTimeInterval: 2.2)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.49, dy: 0.48)).tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.54, dy: 0.46)).tap()
+        let neonBrush = app.buttons["hud.brush.neon"]
+        if neonBrush.waitForExistence(timeout: 3.0) {
+            neonBrush.tap()
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.44, dy: 0.53)).tap()
+        }
+        Thread.sleep(forTimeInterval: 2.4)
         try captureAndSave(name: "02_voxel_destruction.png", dir: outDir)
 
-        // 3. Neon Cavern (Pro biome converged)
+        // 3. Neon Cavern (blooming glowing monoliths + reflective water)
         let neonBtn = app.buttons["hud.biome.neon"]
         XCTAssertTrue(neonBtn.waitForExistence(timeout: 5.0))
         neonBtn.tap()
-        Thread.sleep(forTimeInterval: 2.5)
+        Thread.sleep(forTimeInterval: 2.6)
         try captureAndSave(name: "03_neon_cavern.png", dir: outDir)
 
-        // 4. Glass Cathedral + Architect Pro Paywall sheet
+        // 4. Glass Cathedral (unobstructed nave, altar, stained-glass rose window)
         let cathedralBtn = app.buttons["hud.biome.cathedral"]
         XCTAssertTrue(cathedralBtn.waitForExistence(timeout: 5.0))
         cathedralBtn.tap()
-        Thread.sleep(forTimeInterval: 2.0)
+        Thread.sleep(forTimeInterval: 2.6)
+        try captureAndSave(name: "04_glass_cathedral.png", dir: outDir)
 
+        // 5. VoxelRay Studio translucent frosted Paywall
         let proBtn = app.buttons["hud.button.pro"]
         XCTAssertTrue(proBtn.waitForExistence(timeout: 5.0))
         proBtn.tap()
         XCTAssertTrue(app.otherElements["paywall.root"].waitForExistence(timeout: 5.0))
-        Thread.sleep(forTimeInterval: 0.8)
-        try captureAndSave(name: "04_glass_cathedral_paywall.png", dir: outDir)
+        Thread.sleep(forTimeInterval: 0.9)
+        try captureAndSave(name: "05_studio_paywall.png", dir: outDir)
     }
 
     private func captureAndSave(name: String, dir: URL) throws {
@@ -83,7 +96,6 @@ final class ScreenshotCaptureUITests: XCTestCase {
         let dstW = max(srcW, srcH)
         let dstH = min(srcW, srcH)
 
-        // Render into 32-bit RGBX buffer, orienting landscape if needed, then strip to pure 24-bit RGB
         let rgbaBytesPerRow = dstW * 4
         var rgba = [UInt8](repeating: 0, count: rgbaBytesPerRow * dstH)
         let colorSpace = CGColorSpaceCreateDeviceRGB()
@@ -101,7 +113,6 @@ final class ScreenshotCaptureUITests: XCTestCase {
         }
 
         if srcW < srcH {
-            // Rotate 90 degrees CW in CGContext (upright LandscapeLeft)
             ctx.translateBy(x: CGFloat(dstW), y: 0)
             ctx.rotate(by: .pi / 2.0)
             ctx.draw(cg, in: CGRect(x: 0, y: 0, width: srcW, height: srcH))

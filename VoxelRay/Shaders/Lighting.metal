@@ -68,7 +68,24 @@ float3 evaluateNishitaSky(float3 dir, float3 sunDir, uint biomeId) {
     return sky;
 }
 
-/// Multi-bounce Monte Carlo path tracer using Amanatides-Woo 3D DDA (Simulator & fallback path).
+/// Returns balanced biome direct sunlight calibrated for ACES highlight preservation.
+inline float3 evaluateBiomeSunColor(float3 sunDir, uint biomeId) {
+    float elevationT = smoothstep(0.08f, 0.58f, clamp(sunDir.y, 0.0f, 1.0f));
+    if (biomeId == 1u) {
+        return mix(float3(0.32f, 0.46f, 0.85f), float3(0.45f, 0.68f, 1.15f), elevationT);
+    }
+    if (biomeId == 2u) {
+        float3 goldenHour = float3(2.25f, 1.32f, 0.72f);
+        float3 highNoon = float3(1.98f, 1.78f, 1.48f);
+        return mix(goldenHour, highNoon, elevationT);
+    }
+    float3 twilight = float3(0.65f, 0.62f, 0.95f);
+    float3 sunset = float3(2.15f, 1.28f, 0.68f);
+    float3 noon = float3(1.88f, 1.72f, 1.46f);
+    return mix(mix(twilight, sunset, smoothstep(0.06f, 0.25f, sunDir.y)), noon, elevationT);
+}
+
+/// Multi-bounce Monte Carlo path tracer using Amanatides-Woo 3D DDA (Simulator & compute fallback path).
 float3 traceMonteCarloDDA(
     float3 rayOrigin,
     float3 rayDir,
@@ -80,6 +97,7 @@ float3 traceMonteCarloDDA(
     uint maxBounces = max(1u, min(uniforms.renderParams.y, 4u));
     uint biomeId = uniforms.gridSizeAndBiome.w;
     float3 sunDir = normalize(uniforms.sunDirAndElevation.xyz);
+    float timeSec = uniforms.resolutionAndTime.w;
 
     uint rng = wangHashLight(gid.x * 1973u ^ gid.y * 9277u ^ (frameIndex + 1u) * 26699u);
 
@@ -97,17 +115,48 @@ float3 traceMonteCarloDDA(
 
         float3 hitPos = curOrigin + curDir * hit.distance;
         MaterialProps mat = getMaterialProps(hit.materialId, float3(hit.voxelCoord) + 0.5f);
+        float2 aoBevel = evaluateVoxelAOAndBevel(hitPos, hit.normal, hit.voxelCoord, voxels);
+        float ao = aoBevel.x;
+        float bevelGlint = aoBevel.y;
+
         radiance += throughput * mat.emissive;
+        radiance += throughput * mat.albedo * evaluateBlastDynamicLight(hitPos, hit.normal, uniforms);
 
         float3 n = hit.normal;
         float nDotL = dot(n, sunDir);
+        float3 sunColor = evaluateBiomeSunColor(sunDir, biomeId);
+
+        if (hit.materialId == MAT_WATER) {
+            float3 wn = evaluateWaterRippleNormal(hitPos, timeSec, n);
+            float cosV = clamp(dot(-curDir, wn), 0.0f, 1.0f);
+            float reflProb = clamp(0.28f + 0.68f * pow(1.0f - cosV, 4.0f), 0.28f, 0.96f);
+
+            VoxelHit waterShadow = traceVoxelDDA(hitPos + n * 0.02f, sunDir, 150.0f, voxels);
+            float litFactor = waterShadow.hit ? 0.22f : 1.0f;
+            if (!waterShadow.hit) {
+                float3 halfVec = normalize(sunDir - curDir);
+                float spec = pow(max(dot(wn, halfVec), 0.0f), 110.0f);
+                radiance += throughput * sunColor * spec * 2.4f;
+            }
+
+            float caustic = 0.62f + 0.38f * sin(hitPos.x * 2.1f + timeSec * 1.8f) * cos(hitPos.z * 2.1f - timeSec * 1.5f);
+            float3 basinBase = (biomeId == 1u) ? float3(0.05f, 0.26f, 0.36f) : float3(0.10f, 0.60f, 0.72f);
+            float3 skyAmb = evaluateNishitaSky(float3(0.0f, 1.0f, 0.0f), sunDir, biomeId);
+            radiance += throughput * (1.0f - reflProb) * basinBase * (0.45f + 0.55f * caustic)
+                      * (0.42f * skyAmb + 0.58f * litFactor * sunColor * 0.35f) * ao;
+
+            float3 rDir = reflect(curDir, wn);
+            if (rDir.y < 0.02f) rDir.y = 0.02f;
+            curDir = normalize(rDir);
+            curOrigin = hitPos + n * 0.02f;
+            throughput *= reflProb * float3(0.86f, 0.95f, 1.0f);
+            continue;
+        }
+
         if (nDotL > 0.0f && mat.transmission < 0.5f) {
             VoxelHit shadow = traceVoxelDDA(hitPos + n * 0.015f, sunDir, 150.0f, voxels);
             if (!shadow.hit) {
-                float3 sunColor = (biomeId == 1u)
-                    ? float3(0.55f, 0.78f, 1.25f)
-                    : (biomeId == 2u ? float3(2.6f, 2.35f, 2.0f) : float3(2.9f, 2.6f, 2.2f));
-                radiance += throughput * mat.albedo * sunColor * nDotL * (1.0f - mat.metallic * 0.45f);
+                radiance += throughput * mat.albedo * sunColor * nDotL * (1.0f - mat.metallic * 0.40f) * (1.0f + bevelGlint);
             }
         }
 
@@ -119,27 +168,54 @@ float3 traceMonteCarloDDA(
             float r0 = (1.0f - eta) / (1.0f + eta);
             r0 = r0 * r0;
             float fresnel = r0 + (1.0f - r0) * pow(1.0f - cosTheta, 5.0f);
-            float3 refracted = refract(curDir, orientN, eta);
 
-            if (length(refracted) < 1e-4f || randFloatLight(rng) < fresnel) {
+            // Crisp dielectric sun specular glint
+            float3 halfVec = normalize(sunDir - curDir);
+            float spec = pow(max(dot(orientN, halfVec), 0.0f), 96.0f);
+            radiance += throughput * sunColor * spec * 1.4f;
+
+            float3 refracted = refract(curDir, orientN, eta);
+            if (length(refracted) < 1e-4f || randFloatLight(rng) < (fresnel * 0.85f + 0.08f)) {
                 curDir = reflect(curDir, orientN);
-                curOrigin = hitPos + orientN * 0.015f;
+                curOrigin = hitPos + orientN * 0.02f;
+                throughput *= mix(float3(0.85f, 0.94f, 1.0f), mat.albedo, 0.35f);
             } else {
-                curDir = normalize(refracted);
-                curOrigin = hitPos - orientN * 0.015f;
-                throughput *= exp(-mat.absorption * 0.75f);
+                float3 bentDir = normalize(mix(curDir, normalize(refracted), 0.28f));
+                float3 bMin = float3(hit.voxelCoord);
+                float3 bMax = bMin + 1.0f;
+                float3 invR = float3(
+                    fabs(bentDir.x) > 1e-5f ? (1.0f / bentDir.x) : 1e6f,
+                    fabs(bentDir.y) > 1e-5f ? (1.0f / bentDir.y) : 1e6f,
+                    fabs(bentDir.z) > 1e-5f ? (1.0f / bentDir.z) : 1e6f
+                );
+                float3 tExit3 = max((bMin - hitPos) * invR, (bMax - hitPos) * invR);
+                float tx = (fabs(bentDir.x) > 1e-5f && tExit3.x > 1e-4f) ? tExit3.x : 1e6f;
+                float ty = (fabs(bentDir.y) > 1e-5f && tExit3.y > 1e-4f) ? tExit3.y : 1e6f;
+                float tz = (fabs(bentDir.z) > 1e-5f && tExit3.z > 1e-4f) ? tExit3.z : 1e6f;
+                float exitStep = clamp(min(tx, min(ty, tz)), 0.02f, 1.74f);
+                curDir = bentDir;
+                curOrigin = hitPos + bentDir * (exitStep + 0.02f);
+                throughput *= mix(float3(0.88f, 0.95f, 1.0f), mat.albedo, 0.55f) * exp(-mat.absorption * 0.55f);
             }
-            throughput *= mat.albedo;
+            if (bounce == maxBounces - 1u) {
+                radiance += throughput * evaluateNishitaSky(curDir, sunDir, biomeId);
+            }
         } else if (mat.metallic > 0.5f) {
             float3 refl = reflect(curDir, n);
             float3 diff = cosineSampleHemisphereLight(n, rng);
             curDir = normalize(mix(refl, diff, mat.roughness * mat.roughness));
             curOrigin = hitPos + n * 0.015f;
-            throughput *= mat.albedo;
+            throughput *= mat.albedo * (0.75f + 0.25f * ao);
         } else {
-            curDir = cosineSampleHemisphereLight(n, rng);
+            // Subtle crevice AO on diffuse indirect path + soft sky fill on final bounce
+            float3 sampleDir = cosineSampleHemisphereLight(n, rng);
+            if (bounce == maxBounces - 1u) {
+                radiance += throughput * mat.albedo * evaluateNishitaSky(n, sunDir, biomeId) * 0.28f * ao;
+                break;
+            }
+            curDir = sampleDir;
             curOrigin = hitPos + n * 0.015f;
-            throughput *= mat.albedo;
+            throughput *= mat.albedo * (0.55f + 0.45f * ao);
         }
 
         // Russian roulette / firefly clamp
@@ -156,6 +232,60 @@ float3 traceMonteCarloDDA(
         radiance *= (clampLimit / maxLum);
     }
     return radiance;
+}
+
+kernel void bloomTonemapPresentKernel(
+    constant FrameUniforms& uniforms [[buffer(0)]],
+    texture2d<float, access::sample> hdrTex [[texture(0)]],
+    texture2d<float, access::write> displayTex [[texture(1)]],
+    uint2 gid [[thread_position_in_grid]]
+) {
+    uint2 dims = uint2(displayTex.get_width(), displayTex.get_height());
+    if (gid.x >= dims.x || gid.y >= dims.y) {
+        return;
+    }
+
+    constexpr sampler linSampler(coord::normalized, filter::linear, address::clamp_to_edge);
+    float2 uv = (float2(gid) + 0.5f) / float2(dims);
+    float2 texel = 1.0f / float2(max(hdrTex.get_width(), 1u), max(hdrTex.get_height(), 1u));
+
+    float3 hdr = hdrTex.sample(linSampler, uv).rgb;
+
+    // 13-tap dual-ring optical bloom for neon emitters, sun glints, and crystal flares
+    const float2 offsets[12] = {
+        float2( 1.5f,  1.5f), float2(-1.5f,  1.5f), float2( 1.5f, -1.5f), float2(-1.5f, -1.5f),
+        float2( 4.0f,  0.0f), float2(-4.0f,  0.0f), float2( 0.0f,  4.0f), float2( 0.0f, -4.0f),
+        float2( 6.5f,  6.5f), float2(-6.5f,  6.5f), float2( 6.5f, -6.5f), float2(-6.5f, -6.5f)
+    };
+    const float weights[12] = {
+        0.12f, 0.12f, 0.12f, 0.12f,
+        0.08f, 0.08f, 0.08f, 0.08f,
+        0.05f, 0.05f, 0.05f, 0.05f
+    };
+
+    float3 bloom = max(hdr - 1.05f, 0.0f) * 0.25f;
+    for (int i = 0; i < 12; ++i) {
+        float3 s = hdrTex.sample(linSampler, uv + offsets[i] * texel).rgb;
+        bloom += max(s - 1.02f, 0.0f) * weights[i];
+    }
+
+    float bloomStrength = uniforms.extra2.x > 0.0f ? uniforms.extra2.x : 0.38f;
+    float3 combined = hdr + bloom * bloomStrength;
+
+    // Subtle filmic saturation boost before ACES
+    float lum = dot(combined, float3(0.2126f, 0.7152f, 0.0722f));
+    combined = mix(float3(lum), combined, 1.07f);
+    combined = max(combined, 0.0f);
+
+    float3 mapped = acesFilmicToneMap(combined);
+
+    // Subtle edge vignette for depth & framing
+    float2 vigUV = uv - 0.5f;
+    float vigStrength = uniforms.extra2.y > 0.0f ? uniforms.extra2.y : 0.16f;
+    float vignette = 1.0f - dot(vigUV, vigUV) * vigStrength;
+    mapped *= clamp(vignette, 0.72f, 1.0f);
+
+    displayTex.write(float4(linearToSRGB(mapped), 1.0f), gid);
 }
 
 kernel void tonemapPresentKernel(

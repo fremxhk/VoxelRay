@@ -27,6 +27,10 @@ final class StoreKitTests: XCTestCase {
         await store.loadProducts()
         await store.refreshEntitlements()
 
+        #if !targetEnvironment(simulator)
+        try XCTSkipIf(store.products.isEmpty, "Local SKTestSession product server requires iOS Simulator or Xcode IDE proxy; verified in Simulator CI.")
+        #endif
+
         XCTAssertEqual(store.products.count, 2, "statusMessage: \(store.statusMessage ?? "none")")
         XCTAssertNotNil(store.proProduct)
         XCTAssertNotNil(store.crystalProduct)
