@@ -262,7 +262,7 @@ def prepare_app(client: ASCClient):
         raise RuntimeError("Could not find or create ASC App record.")
 
     app_id = app["id"]
-    _, builds = client.request("GET", f"/v1/apps/{app_id}/builds?sort=-version&limit=10")
+    _, builds = client.request("GET", f"/v1/builds?filter[app]={app_id}&limit=50")
     max_build = 0
     for b in builds.get("data", []):
         v = b["attributes"].get("version", "0")
@@ -642,7 +642,6 @@ def stage_content_rights_and_age_rating(client: ASCClient, app_id: str, app_info
                     "violenceCartoonOrFantasy": "NONE",
                     "violenceRealisticProlongedGraphicOrSadistic": "NONE",
                     "violenceRealistic": "NONE",
-                    "ageRatingOverride": "NONE",
                     "ageRatingOverrideV2": "NONE",
                     "koreaAgeRatingOverride": "NONE",
                 },
@@ -659,9 +658,14 @@ def stage_pricing_and_availability(client: ASCClient, app_id: str) -> list[str]:
     territory_ids = [t["id"] for t in territories]
 
     # App Price Schedule (Free $0.00 USA base)
-    st_ps, cur_ps = client.request("GET", f"/v1/apps/{app_id}/appPriceSchedule", allow_statuses=(200, 404))
-    if st_ps == 200 and cur_ps.get("data"):
-        print(f"App Price Schedule already exists (id={cur_ps['data']['id']})")
+    st_ps, cur_ps = client.request("GET", f"/v1/apps/{app_id}/appPriceSchedule?include=manualPrices", allow_statuses=(200, 404))
+    has_app_manual = (
+        st_ps == 200
+        and isinstance(cur_ps.get("data"), dict)
+        and len(cur_ps["data"].get("relationships", {}).get("manualPrices", {}).get("data", [])) > 0
+    )
+    if has_app_manual:
+        print(f"App Price Schedule already configured (id={cur_ps['data']['id']})")
     else:
         _, pp_res = client.request("GET", f"/v1/apps/{app_id}/appPricePoints?filter[territory]=USA&limit=20")
         free_pp = next(
@@ -697,7 +701,7 @@ def stage_pricing_and_availability(client: ASCClient, app_id: str) -> list[str]:
         print("Set App Price Schedule: Free ($0.00 USD)")
 
     # App Global Availability (v2)
-    st_av, cur_av = client.request("GET", f"/v1/apps/{app_id}/appAvailabilityV2?limit=5", allow_statuses=(200, 404))
+    st_av, cur_av = client.request("GET", f"/v1/apps/{app_id}/appAvailabilityV2", allow_statuses=(200, 404))
     has_avail = st_av == 200 and cur_av.get("data") is not None
     if not has_avail:
         included = []
@@ -815,6 +819,14 @@ def stage_screenshots(client: ASCClient, loc_id: str, screenshot_dir: Path):
                 continue
 
         _, old_shots = client.request("GET", f"/v1/appScreenshotSets/{set_id}/appScreenshots")
+        existing_complete = {
+            s["attributes"].get("fileName"): s["attributes"].get("assetDeliveryState", {}).get("state")
+            for s in old_shots.get("data", [])
+        }
+        expected_names = [p.name for p in pngs[:5]]
+        if len(existing_complete) == len(expected_names) and all(existing_complete.get(n) == "COMPLETE" for n in expected_names):
+            print(f"  All {len(expected_names)} screenshots already COMPLETE in {display_type}")
+            return
         for s in old_shots.get("data", []):
             client.request("DELETE", f"/v1/appScreenshots/{s['id']}", allow_statuses=(200, 204, 404))
 
@@ -973,10 +985,15 @@ def stage_iap(
     # IAP USA price schedule
     st_ps, cur_ps = client.request(
         "GET",
-        f"/v2/inAppPurchases/{iap_id}/iapPriceSchedule",
+        f"/v2/inAppPurchases/{iap_id}/iapPriceSchedule?include=manualPrices",
         allow_statuses=(200, 404),
     )
-    if st_ps != 200 or not cur_ps.get("data"):
+    has_iap_manual = (
+        st_ps == 200
+        and isinstance(cur_ps.get("data"), dict)
+        and len(cur_ps["data"].get("relationships", {}).get("manualPrices", {}).get("data", [])) > 0
+    )
+    if not has_iap_manual:
         pps = client.get_paginated(f"/v2/inAppPurchases/{iap_id}/pricePoints?filter[territory]=USA&limit=200")
         target_pp = next(
             (p["id"] for p in pps if f"{float(p['attributes'].get('customerPrice', -1)):.2f}" == usd_price),
@@ -1219,7 +1236,7 @@ def stage_draft(client: ASCClient, build_number: str):
         product_id=f"{BUNDLE_ID}.pro",
         reference_name="Architect Pro",
         display_name="Architect Pro",
-        description="Unlock Neon Cavern & Glass Cathedral biomes and watermark-free 4K Photo Mode.",
+        description="Unlock Neon Cavern, Glass Cathedral & clean 4K photos.",
         usd_price="4.99",
         review_screenshot=paywall_shot,
         territory_ids=territory_ids,
@@ -1230,7 +1247,7 @@ def stage_draft(client: ASCClient, build_number: str):
         product_id=f"{BUNDLE_ID}.materials.crystal",
         reference_name="Prism Material Pack",
         display_name="Prism Material Pack",
-        description="Unlock the refractive Prism Crystal brush for sculpting glowing glass voxels.",
+        description="Unlock refractive Prism Crystal voxels for sculpting.",
         usd_price="1.99",
         review_screenshot=paywall_shot,
         territory_ids=territory_ids,
