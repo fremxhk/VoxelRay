@@ -132,3 +132,14 @@ schemes:
       config: Debug
     archive:
       config: Release
+
+  VoxelRayReviewCapture:
+    build:
+      targets:
+        VoxelRay: all
+        VoxelRayUITests: [test]
+    test:
+      config: Debug
+      testPlans:
+        - path: VoxelRayUITests/VoxelRayReviewCapture.xctestplan
+          defaultPlan: true

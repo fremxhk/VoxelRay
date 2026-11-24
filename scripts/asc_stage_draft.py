@@ -745,11 +745,51 @@ def stage_review_detail(client: ASCClient, version_id: str, review_contact: dict
         return
 
     notes = (
-        "VoxelRay runs 100% on-device with no login or backend server. Hold landscape orientation. "
-        "Tap 3D structures to blast voxel craters (or select Gold/Neon/Glass brushes to build), "
-        "drag to rotate camera, use the bottom-left virtual stick to fly, test Undo and Dawn/Noon/Sunset/Night lighting presets, "
-        "and tap Pro or any locked biome to inspect/purchase the two StoreKit 2 non-consumables "
-        f"({BUNDLE_ID}.pro and {BUNDLE_ID}.materials.crystal)."
+        "1. PHYSICAL DEVICE SCREEN RECORDING\n"
+        'Attached in App Review Information Attachments as "voxelray_iphone13_review.mp4" '
+        "(captured directly on physical iPhone 13 mini, iPhone14,4, running iOS 27.2.1). "
+        "The recording begins on the iOS Home Screen, launches VoxelRay, and demonstrates real-time "
+        "Metal ray-traced voxel destruction, Undo, Gold/Neon sculpting brushes, Sunset/Night/Noon "
+        "lighting, camera pan and virtual joystick flight, timed live previews of Neon Cavern and "
+        "Glass Cathedral, accessing paid content via the VoxelRay Studio StoreKit 2 paywall "
+        "(Architect Pro, Prism Material Pack, and Restore Purchases), and 64-sample Photo Mode export.\n"
+        "- Account registration, login, and deletion: Not applicable. VoxelRay does not create, "
+        "require, or support user accounts or sign-in.\n"
+        "- User-generated content (UGC) reporting/blocking: Not applicable. All voxel edits exist "
+        "strictly locally on-device with no social feed, server, or shared public UGC.\n\n"
+        "2. PURPOSE, TARGET AUDIENCE & VALUE\n"
+        "VoxelRay is a real-time ray-traced destructible voxel sandbox built natively for iPhone. "
+        "Target audience: casual players, sandbox builders, and mobile graphics enthusiasts (ages 4+). "
+        "Problem solved and value provided: physically based multi-bounce ray tracing and destructible "
+        "3D voxel worlds are rarely available offline on handheld phones; VoxelRay delivers tactile "
+        "voxel blasting, creative material sculpting, physics debris, procedural spatial audio, and "
+        "64-sample Photo Mode renders entirely on-device with no servers, ads, or subscriptions.\n\n"
+        "3. SETUP & FEATURE ACCESS INSTRUCTIONS\n"
+        "- No login credentials, demo account, or sample files are required. Launch in landscape orientation.\n"
+        "- Core Free Sandbox (Sunlit Courtyard): Tap structures to blast spherical voxel craters with 3D "
+        "debris and haptics; tap Undo or Reset World (bottom right). Drag anywhere to rotate camera; "
+        "use the bottom-left virtual joystick to fly. Select Carve, Gold, Neon, or Glass brushes "
+        "(bottom left) to destroy or sculpt. Adjust Blast Radius, Sun Elevation, or Dawn/Noon/Sunset/"
+        "Night presets (bottom right). Tap the speaker icon (top right) to toggle procedural audio.\n"
+        '- Photo Mode: Tap "Photo Mode" (top right) to converge a 64-sample path-traced render and '
+        "export via the native iOS Share Sheet.\n"
+        '- Paid Features (StoreKit 2): Tap locked "Neon Cavern" or "Glass Cathedral" (top bar) for a '
+        'live timed preview, then tap "Unlock Pro" (or tap the "Pro" button or locked "Prism" brush) '
+        "to open VoxelRay Studio and purchase or restore Architect Pro "
+        f"({BUNDLE_ID}.pro, $4.99) or Prism Material Pack ({BUNDLE_ID}.materials.crystal, $1.99).\n\n"
+        "4. EXTERNAL SERVICES, TOOLS & PLATFORMS\n"
+        "None. VoxelRay uses zero external servers, zero third-party SDKs, zero analytics or ad "
+        "networks, zero external payment processors, and zero AI/ML services. Core functionality runs "
+        "100% on-device using native Apple frameworks only: SwiftUI, Metal, MetalFX, AVFoundation, "
+        "UIKit (UIActivityViewController), and Apple StoreKit 2 exclusively for in-app purchases.\n\n"
+        "5. REGIONAL DIFFERENCES\n"
+        "None. VoxelRay functions identically across all supported App Store regions with zero "
+        "geo-blocking, regional feature differences, or region-specific content. Only StoreKit 2 "
+        "purchase pricing displays automatically in each storefront's local currency via Apple App Store.\n\n"
+        "6. REGULATED INDUSTRY / PROTECTED THIRD-PARTY MATERIAL\n"
+        "Not applicable. VoxelRay is a general-audience creative sandbox game (rated 4+), does not "
+        "operate in a regulated industry, and includes zero protected third-party material—all 3D voxel "
+        "geometry, shaders, UI assets, and synthesized procedural audio are 100% original and generated on-device."
     )
     attrs = {
         "contactFirstName": review_contact["first_name"],

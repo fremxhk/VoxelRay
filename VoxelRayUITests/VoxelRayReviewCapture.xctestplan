@@ -1,0 +1,33 @@
+{
+  "configurations": [
+    {
+      "id": "A1B2C3D4-E5F6-4789-ABCD-000000000001",
+      "name": "PhysicalDeviceVideo",
+      "options": {
+        "environmentVariableEntries": [
+          {
+            "key": "MTL_DEBUG_LAYER",
+            "value": "0"
+          }
+        ],
+        "preferredScreenCaptureFormat": "screenRecording",
+        "storeKitConfigurationFilePath": "VoxelRay/Resources/VoxelRay.storekit",
+        "uiTestingScreenshotsLifetime": "keepAlways"
+      }
+    }
+  ],
+  "defaultOptions": {
+    "preferredScreenCaptureFormat": "screenRecording",
+    "uiTestingScreenshotsLifetime": "keepAlways"
+  },
+  "testTargets": [
+    {
+      "target": {
+        "containerPath": "container:VoxelRay.xcodeproj",
+        "identifier": "DDB151A832668B6F039E1284",
+        "name": "VoxelRayUITests"
+      }
+    }
+  ],
+  "version": 1
+}

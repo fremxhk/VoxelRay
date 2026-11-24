@@ -88,6 +88,7 @@
 		9A03E994393ED0DD9DA8A8E6 /* DestructionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestructionTests.swift; sourceTree = "<group>"; };
 		B48A831D424C489D524BFD6A /* VoxelRayUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxelRayUITests.swift; sourceTree = "<group>"; };
 		B76BD1EC29BB8A6B00038A16 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B983E71CD0A2E9DE381808AE /* VoxelRayReviewCapture.xctestplan */ = {isa = PBXFileReference; path = VoxelRayReviewCapture.xctestplan; sourceTree = "<group>"; };
 		C0699F5A64113EE0F642C0FF /* CameraTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraTests.swift; sourceTree = "<group>"; };
 		C0FB07E2A7BD494F34349A77 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		C2CE676BC3F227E6C6587C22 /* AudioAndGameplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioAndGameplayTests.swift; sourceTree = "<group>"; };
@@ -169,6 +170,7 @@
 			isa = PBXGroup;
 			children = (
 				8F1A3AA9FA8450E25E4A2FE5 /* ScreenshotCaptureUITests.swift */,
+				B983E71CD0A2E9DE381808AE /* VoxelRayReviewCapture.xctestplan */,
 				B48A831D424C489D524BFD6A /* VoxelRayUITests.swift */,
 			);
 			path = VoxelRayUITests;
