@@ -85,13 +85,15 @@ inline float3 evaluateBiomeSunColor(float3 sunDir, uint biomeId) {
     return mix(mix(twilight, sunset, smoothstep(0.06f, 0.25f, sunDir.y)), noon, elevationT);
 }
 
-/// Multi-bounce Monte Carlo path tracer using Amanatides-Woo 3D DDA (Simulator & compute fallback path).
-float3 traceMonteCarloDDA(
+/// Multi-bounce Monte Carlo path tracer using Amanatides-Woo 3D DDA, also outputting primary hit distance/position.
+float3 traceMonteCarloDDAWithPrimaryHit(
     float3 rayOrigin,
     float3 rayDir,
     uint2 gid,
     constant FrameUniforms& uniforms,
-    const device uint8_t* voxels
+    const device uint8_t* voxels,
+    thread float& outFirstHitDist,
+    thread float3& outFirstHitPos
 ) {
     uint frameIndex = uniforms.renderParams.x;
     uint maxBounces = max(1u, min(uniforms.renderParams.y, 4u));
@@ -105,6 +107,8 @@ float3 traceMonteCarloDDA(
     float3 throughput = float3(1.0f);
     float3 curOrigin = rayOrigin;
     float3 curDir = rayDir;
+    outFirstHitDist = 200.0f;
+    outFirstHitPos = rayOrigin + rayDir * 200.0f;
 
     for (uint bounce = 0u; bounce < maxBounces; ++bounce) {
         VoxelHit hit = traceVoxelDDA(curOrigin, curDir, 200.0f, voxels);
@@ -114,6 +118,10 @@ float3 traceMonteCarloDDA(
         }
 
         float3 hitPos = curOrigin + curDir * hit.distance;
+        if (bounce == 0u) {
+            outFirstHitDist = hit.distance;
+            outFirstHitPos = hitPos;
+        }
         MaterialProps mat = getMaterialProps(hit.materialId, float3(hit.voxelCoord) + 0.5f);
         float2 aoBevel = evaluateVoxelAOAndBevel(hitPos, hit.normal, hit.voxelCoord, voxels);
         float ao = aoBevel.x;
@@ -232,6 +240,18 @@ float3 traceMonteCarloDDA(
         radiance *= (clampLimit / maxLum);
     }
     return radiance;
+}
+
+float3 traceMonteCarloDDA(
+    float3 rayOrigin,
+    float3 rayDir,
+    uint2 gid,
+    constant FrameUniforms& uniforms,
+    const device uint8_t* voxels
+) {
+    float dummyDist = 200.0f;
+    float3 dummyPos = float3(0.0f);
+    return traceMonteCarloDDAWithPrimaryHit(rayOrigin, rayDir, gid, uniforms, voxels, dummyDist, dummyPos);
 }
 
 kernel void bloomTonemapPresentKernel(

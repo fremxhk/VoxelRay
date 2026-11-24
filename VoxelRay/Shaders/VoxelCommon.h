@@ -403,6 +403,15 @@ inline float3 linearToSRGB(float3 c) {
 
 // Functions implemented in Lighting.metal
 float3 evaluateNishitaSky(float3 dir, float3 sunDir, uint biomeId);
+float3 traceMonteCarloDDAWithPrimaryHit(
+    float3 origin,
+    float3 dir,
+    uint2 gid,
+    constant FrameUniforms& u,
+    const device uint8_t* voxels,
+    thread float& outFirstHitDist,
+    thread float3& outFirstHitPos
+);
 float3 traceMonteCarloDDA(
     float3 origin,
     float3 dir,

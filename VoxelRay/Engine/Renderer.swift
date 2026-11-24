@@ -215,6 +215,42 @@ public final class Renderer: ObservableObject {
         }
     }
 
+    public var activeScaleFactor: Float { activeScale }
+
+    public var isMetalFXActiveOnDevice: Bool {
+        #if targetEnvironment(simulator)
+        return false
+        #else
+        return devicePipeline != nil || (computePipeline?.supportsMetalFX ?? false)
+        #endif
+    }
+
+    public var activeRenderingBackendDescription: String {
+        #if targetEnvironment(simulator)
+        return "SimulatorComputeDDA"
+        #else
+        if devicePipeline != nil {
+            return "Metal4HardwareBVH+MetalFX"
+        } else if computePipeline?.supportsMetalFX == true {
+            return "A15ComputeDDA+MetalFX"
+        } else {
+            return "ComputeDDA"
+        }
+        #endif
+    }
+
+    /// Reads resident physical footprint (`phys_footprint`) from Darwin kernel task info.
+    public static func currentPhysicalMemoryBytes() -> UInt64 {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let kr = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        return kr == KERN_SUCCESS ? UInt64(info.phys_footprint) : 0
+    }
+
     public func refreshThermalProfile() {
         #if targetEnvironment(simulator)
         activeScale = 1.0
@@ -222,33 +258,24 @@ public final class Renderer: ObservableObject {
         thermalBadgeText = "MetalFX (Device Only)"
         #else
         let state = ProcessInfo.processInfo.thermalState
-        if devicePipeline != nil {
-            let cfg = Metal4DevicePipeline.thermalConfig(for: state)
-            if abs(activeScale - cfg.scale) > 1e-3 {
-                camera.resetAccumulation()
-            }
-            activeScale = cfg.scale
-            activeMaxBounces = cfg.maxBounces
-            thermalBadgeText = cfg.badge
-        } else {
-            let cfg: (scale: Float, bounces: UInt32, badge: String)
-            switch state {
-            case .nominal, .fair:
-                cfg = (0.72, 3, "Metal RT · 72%")
-            case .serious:
-                cfg = (0.58, 2, "Metal RT · 58%")
-            case .critical:
-                cfg = (0.50, 1, "Metal RT · 50%")
-            @unknown default:
-                cfg = (0.72, 3, "Metal RT · 72%")
-            }
-            if abs(activeScale - cfg.scale) > 1e-3 {
-                camera.resetAccumulation()
-            }
-            activeScale = cfg.scale
-            activeMaxBounces = cfg.bounces
-            thermalBadgeText = cfg.badge
+        let prefix = isMetalFXActiveOnDevice ? "MetalFX" : "Metal RT"
+        let cfg: (scale: Float, bounces: UInt32, badge: String)
+        switch state {
+        case .nominal, .fair:
+            cfg = (0.67, 3, "\(prefix) · 67%")
+        case .serious:
+            cfg = (0.58, 2, "\(prefix) · 58% (Warm)")
+        case .critical:
+            cfg = (0.50, 1, "\(prefix) · 50% (Thermal)")
+        @unknown default:
+            cfg = (0.67, 3, "\(prefix) · 67%")
         }
+        if abs(activeScale - cfg.scale) > 1e-3 {
+            camera.resetAccumulation()
+        }
+        activeScale = cfg.scale
+        activeMaxBounces = cfg.bounces
+        thermalBadgeText = cfg.badge
         #endif
     }
 
@@ -604,7 +631,7 @@ public final class Renderer: ObservableObject {
         inWidth = max(64, Int(round(Float(outWidth) * activeScale)))
         inHeight = max(64, Int(round(Float(outHeight) * activeScale)))
         let jIdx = (camera.frameIndex % 16) + 1
-        jitter = (devicePipeline != nil)
+        jitter = isMetalFXActiveOnDevice
             ? SIMD2<Float>(Self.halton(jIdx, base: 2), Self.halton(jIdx, base: 3))
             : .zero
         #endif
@@ -665,6 +692,8 @@ public final class Renderer: ObservableObject {
                 internalHeight: inHeight,
                 outputWidth: outWidth,
                 outputHeight: outHeight,
+                jitter: jitter,
+                resetHistory: resetHistory,
                 frameSemaphore: frameSemaphore
             )
         } else {
@@ -687,7 +716,8 @@ public final class Renderer: ObservableObject {
         height: Int,
         samples: Int = 1,
         biome: VoxelBiome? = nil,
-        smokeOnly: Bool = false
+        smokeOnly: Bool = false,
+        internalScale: Float = 1.0
     ) -> [UInt8] {
         precondition(width > 0 && height > 0)
         if let biome = biome {
@@ -696,15 +726,25 @@ public final class Renderer: ObservableObject {
         camera.updateAspect(Float(width) / Float(height))
         camera.resetAccumulation()
 
+        let clampedScale = min(max(internalScale, 0.50), 1.0)
+        let inW = max(64, Int(round(Float(width) * clampedScale)))
+        let inH = max(64, Int(round(Float(height) * clampedScale)))
+
+        let jitterProvider: (Int) -> SIMD2<Float> = { sampleIdx in
+            let jIdx = UInt32(sampleIdx % 16) + 1
+            return SIMD2<Float>(Self.halton(jIdx, base: 2), Self.halton(jIdx, base: 3))
+        }
+
         let offsetProvider: (Int) -> Int = { [weak self] sampleIdx in
             guard let self = self else { return 0 }
             let slot = self.ringIndex
             self.ringIndex = (self.ringIndex + 1) % Self.maxFramesInFlight
+            let jit = clampedScale < 0.99 ? jitterProvider(sampleIdx) : .zero
             let off = self.writeUniforms(
                 slot: slot,
-                jitter: .zero,
-                internalWidth: width,
-                internalHeight: height,
+                jitter: jit,
+                internalWidth: inW,
+                internalHeight: inH,
                 outputWidth: width,
                 outputHeight: height,
                 maxBounces: 3,
@@ -719,10 +759,13 @@ public final class Renderer: ObservableObject {
             world: world,
             uniformRingBuffer: uniformRingBuffer,
             uniformOffsetProvider: offsetProvider,
+            internalWidth: inW,
+            internalHeight: inH,
             width: width,
             height: height,
             samples: samples,
             smokeOnly: smokeOnly,
+            jitterProvider: jitterProvider,
             frameSemaphore: frameSemaphore
         )
         #else
@@ -741,10 +784,13 @@ public final class Renderer: ObservableObject {
                 world: world,
                 uniformRingBuffer: uniformRingBuffer,
                 uniformOffsetProvider: offsetProvider,
+                internalWidth: inW,
+                internalHeight: inH,
                 width: width,
                 height: height,
                 samples: samples,
                 smokeOnly: smokeOnly,
+                jitterProvider: jitterProvider,
                 frameSemaphore: frameSemaphore
             )
         }

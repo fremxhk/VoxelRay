@@ -105,6 +105,7 @@ public final class MetalLayerUIView: UIView {
         if window != nil {
             updateDrawableSize()
             startDisplayLink()
+            configurePreferredFrameRate()
         } else {
             stopDisplayLink()
         }
@@ -125,12 +126,23 @@ public final class MetalLayerUIView: UIView {
         )
     }
 
+    private func configurePreferredFrameRate() {
+        let screenMax = window?.screen.maximumFramesPerSecond ?? UIScreen.main.maximumFramesPerSecond
+        let maxFPS = Float(max(60, screenMax))
+        let minFPS = min(Float(60), maxFPS)
+        displayLink?.preferredFrameRateRange = CAFrameRateRange(
+            minimum: minFPS,
+            maximum: maxFPS,
+            preferred: maxFPS
+        )
+    }
+
     private func startDisplayLink() {
         guard displayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(tick))
-        link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
         link.add(to: .main, forMode: .common)
         displayLink = link
+        configurePreferredFrameRate()
     }
 
     private func stopDisplayLink() {

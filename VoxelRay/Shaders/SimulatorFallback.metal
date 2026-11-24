@@ -85,3 +85,65 @@ kernel void simulatorPathTraceKernel(
     float3 exposed = accumulated * uniforms.outputAndExposure.y;
     hdrOutTex.write(float4(exposed, 1.0f), gid);
 }
+
+kernel void deviceComputePathTraceKernel(
+    constant FrameUniforms& uniforms [[buffer(0)]],
+    const device uint8_t* voxels [[buffer(1)]],
+    texture2d<float, access::read> accumReadTex [[texture(0)]],
+    texture2d<float, access::write> accumWriteTex [[texture(1)]],
+    texture2d<float, access::write> colorTex [[texture(2)]],
+    texture2d<float, access::write> depthTex [[texture(3)]],
+    texture2d<float, access::write> motionTex [[texture(4)]],
+    uint2 gid [[thread_position_in_grid]]
+) {
+    uint2 dims = uint2(colorTex.get_width(), colorTex.get_height());
+    if (gid.x >= dims.x || gid.y >= dims.y) {
+        return;
+    }
+
+    uint frameIndex = uniforms.renderParams.x;
+    uint rng = wangHashSim(gid.x * 1973u ^ gid.y * 9277u ^ (frameIndex + 1u) * 26699u);
+    float2 jitter = float2(uniforms.cameraRight.w, uniforms.cameraUp.w);
+    if (frameIndex > 0u && length(jitter) < 1e-4f) {
+        jitter = float2(randFloatSim(rng) - 0.5f, randFloatSim(rng) - 0.5f) * 0.75f;
+    }
+
+    float3 rayOrigin = uniforms.cameraPos.xyz;
+    float3 rayDir = computePrimaryRayDir(gid, dims, jitter, uniforms);
+
+    float firstHitDist = 200.0f;
+    float3 firstHitPos = rayOrigin + rayDir * 200.0f;
+    float3 radiance = traceMonteCarloDDAWithPrimaryHit(
+        rayOrigin,
+        rayDir,
+        gid,
+        uniforms,
+        voxels,
+        firstHitDist,
+        firstHitPos
+    );
+
+    float4 prev = (frameIndex == 0u) ? float4(0.0f) : accumReadTex.read(gid);
+    float weight = 1.0f / float(frameIndex + 1u);
+    float3 accumulated = mix(prev.rgb, radiance, weight);
+    accumWriteTex.write(float4(accumulated, 1.0f), gid);
+
+    float3 exposed = accumulated * uniforms.outputAndExposure.y;
+    colorTex.write(float4(exposed, 1.0f), gid);
+
+    float normDepth = clamp(1.0f / max(firstHitDist, 0.1f), 0.0f, 1.0f);
+    depthTex.write(float4(normDepth, 0.0f, 0.0f, 1.0f), gid);
+
+    float3 toPrev = firstHitPos - uniforms.prevCameraPos.xyz;
+    float pz = dot(toPrev, uniforms.prevCameraForward.xyz);
+    float2 motion = float2(0.0f);
+    if (pz > 0.01f) {
+        float tanHalf = tan(uniforms.prevCameraPos.w * 0.5f);
+        float px = dot(toPrev, uniforms.prevCameraRight.xyz) / (pz * max(uniforms.prevCameraForward.w, 0.2f) * tanHalf);
+        float py = dot(toPrev, uniforms.prevCameraUp.xyz) / (pz * tanHalf);
+        float2 prevUV = float2(px * 0.5f + 0.5f, 0.5f - py * 0.5f);
+        float2 currUV = (float2(gid) + 0.5f) / float2(dims);
+        motion = (prevUV - currUV) * float2(dims);
+    }
+    motionTex.write(float4(motion, 0.0f, 1.0f), gid);
+}

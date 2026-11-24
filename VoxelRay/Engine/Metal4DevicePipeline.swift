@@ -18,13 +18,13 @@ final class Metal4DevicePipeline {
     static func thermalConfig(for state: ProcessInfo.ThermalState) -> ThermalConfig {
         switch state {
         case .nominal, .fair:
-            return ThermalConfig(scale: 0.75, maxBounces: 3, badge: "MetalFX · 75%")
+            return ThermalConfig(scale: 0.67, maxBounces: 3, badge: "MetalFX · 67%")
         case .serious:
             return ThermalConfig(scale: 0.58, maxBounces: 2, badge: "MetalFX · 58% (Warm)")
         case .critical:
             return ThermalConfig(scale: 0.50, maxBounces: 1, badge: "MetalFX · 50% (Thermal)")
         @unknown default:
-            return ThermalConfig(scale: 0.75, maxBounces: 3, badge: "MetalFX · 75%")
+            return ThermalConfig(scale: 0.67, maxBounces: 3, badge: "MetalFX · 67%")
         }
     }
 
@@ -427,6 +427,7 @@ final class Metal4DevicePipeline {
                 scaler.jitterOffsetY = jitter.y
                 scaler.motionVectorScaleX = 1.0
                 scaler.motionVectorScaleY = 1.0
+                scaler.isDepthReversed = true
                 scaler.reset = resetHistory || scalerNeedsReset
                 scalerNeedsReset = false
                 scaler.encode(commandBuffer: commandBuffer)

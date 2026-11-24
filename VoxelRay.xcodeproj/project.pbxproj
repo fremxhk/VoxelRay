@@ -25,16 +25,21 @@
 		923A6FF160A7CC6823273FB5 /* StoreConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06228E18D309571C84913F39 /* StoreConfig.swift */; };
 		9794E5C0D55F0E6D7EEA26B7 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 73CCEC5D5E9ED976160F2E30 /* Metal.framework */; };
 		AD351D321B48AB3F3316522E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 2C97FC417C730F08431E0A3C /* PrivacyInfo.xcprivacy */; };
+		B5F8A15A6B3C9CCC7E3DE7DB /* DevicePerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A87340451E7151CB27136B /* DevicePerformanceTests.swift */; };
+		B887D56EB99103BDD2BD143C /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 210DBD40019474B795E9951B /* AVFoundation.framework */; };
 		BDB631392CCF10EE00227543 /* VoxelRay.storekit in Resources */ = {isa = PBXBuildFile; fileRef = F02C992224F5A433E1D24A20 /* VoxelRay.storekit */; };
 		C0BE05538F5DACBA3D8D971F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD755994C3196D5926F7D724 /* ContentView.swift */; };
 		C5EA6A6748DDC31319F19CDA /* SimulatorComputePipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4FDA28A4214D9C288834391 /* SimulatorComputePipeline.swift */; };
 		C74750F6DDF7B3EBB84022A3 /* VoxelWorldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E0A985471778A302DAA260E /* VoxelWorldTests.swift */; };
 		C7DBF446027C2C6AB0495C6C /* RendererSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79C601A8984477F07AD1DC54 /* RendererSmokeTests.swift */; };
+		CF982DBBC60CC9C6A0AA9236 /* AudioAndGameplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2CE676BC3F227E6C6587C22 /* AudioAndGameplayTests.swift */; };
 		CFC0D98F31C3DCC04980B136 /* VoxelRayApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1907CEBEA8FB089A9762400E /* VoxelRayApp.swift */; };
 		D0219A20A489E3EB98245B88 /* Metal4DevicePipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0A95E357BAC80375394C7AC /* Metal4DevicePipeline.swift */; };
 		D043800833803DDCB5166C36 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C0FB07E2A7BD494F34349A77 /* StoreKit.framework */; };
 		DA1570E8C792B21D42C69CDD /* ScreenshotCaptureUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F1A3AA9FA8450E25E4A2FE5 /* ScreenshotCaptureUITests.swift */; };
 		E06612D45D6EFE4BA665086D /* Lighting.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4E581D2DCB2085D906A2F52E /* Lighting.metal */; };
+		E92DEFD6D1882B31F8F83FB7 /* DebrisSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 736C1BA9657C67DD447958FF /* DebrisSystem.swift */; };
+		F2D35D073E663DD0F1D3E1F3 /* SoundEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01C3A98D911C2BD013B1309D /* SoundEngine.swift */; };
 		F56FFF10AAEA211A81823F7B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B76BD1EC29BB8A6B00038A16 /* Assets.xcassets */; };
 		FF7649C53DE95A657D791394 /* Camera.swift in Sources */ = {isa = PBXBuildFile; fileRef = E27FDCBD7BF7F4EFB362E428 /* Camera.swift */; };
 /* End PBXBuildFile section */
@@ -57,10 +62,13 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		01C3A98D911C2BD013B1309D /* SoundEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundEngine.swift; sourceTree = "<group>"; };
 		04782D75935A85F54C776CCA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		06228E18D309571C84913F39 /* StoreConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreConfig.swift; sourceTree = "<group>"; };
 		0AC0E4A287D0383D5679C008 /* SimulatorFallback.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = SimulatorFallback.metal; sourceTree = "<group>"; };
 		1907CEBEA8FB089A9762400E /* VoxelRayApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxelRayApp.swift; sourceTree = "<group>"; };
+		210DBD40019474B795E9951B /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		23A87340451E7151CB27136B /* DevicePerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePerformanceTests.swift; sourceTree = "<group>"; };
 		2A3FFF8A99FEB04D0E055678 /* Renderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Renderer.swift; sourceTree = "<group>"; };
 		2C97FC417C730F08431E0A3C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		3A2AF2E1DD128DF3232F8D8D /* PhotoShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoShareSheet.swift; sourceTree = "<group>"; };
@@ -72,6 +80,7 @@
 		5AFA0F42DE0F2E6E3BE138A5 /* VoxelIntersect.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = VoxelIntersect.metal; sourceTree = "<group>"; };
 		680E1B1A62DD96C68A35C7BC /* VoxelRayUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VoxelRayUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7285CAA3838DC0A4CCE20746 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		736C1BA9657C67DD447958FF /* DebrisSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebrisSystem.swift; sourceTree = "<group>"; };
 		73CCEC5D5E9ED976160F2E30 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		79C601A8984477F07AD1DC54 /* RendererSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RendererSmokeTests.swift; sourceTree = "<group>"; };
 		80E671F66F8A9A890103D8BC /* StoreKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitTests.swift; sourceTree = "<group>"; };
@@ -81,6 +90,7 @@
 		B76BD1EC29BB8A6B00038A16 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C0699F5A64113EE0F642C0FF /* CameraTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraTests.swift; sourceTree = "<group>"; };
 		C0FB07E2A7BD494F34349A77 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
+		C2CE676BC3F227E6C6587C22 /* AudioAndGameplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioAndGameplayTests.swift; sourceTree = "<group>"; };
 		C4FDA28A4214D9C288834391 /* SimulatorComputePipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimulatorComputePipeline.swift; sourceTree = "<group>"; };
 		CF6FBC16DEF33BD34884AA6C /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
 		D0A95E357BAC80375394C7AC /* Metal4DevicePipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Metal4DevicePipeline.swift; sourceTree = "<group>"; };
@@ -104,6 +114,7 @@
 				046DD4F36C90F8773C40D9B5 /* MetalKit.framework in Frameworks */,
 				D043800833803DDCB5166C36 /* StoreKit.framework in Frameworks */,
 				0A3D8C00D15763A11A4ABA57 /* QuartzCore.framework in Frameworks */,
+				B887D56EB99103BDD2BD143C /* AVFoundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -131,10 +142,19 @@
 			path = Store;
 			sourceTree = "<group>";
 		};
+		35BFD0019912AD8EFC76902A /* Audio */ = {
+			isa = PBXGroup;
+			children = (
+				01C3A98D911C2BD013B1309D /* SoundEngine.swift */,
+			);
+			path = Audio;
+			sourceTree = "<group>";
+		};
 		393513A0F28BFE4F5AB245A4 /* Engine */ = {
 			isa = PBXGroup;
 			children = (
 				E27FDCBD7BF7F4EFB362E428 /* Camera.swift */,
+				736C1BA9657C67DD447958FF /* DebrisSystem.swift */,
 				D0A95E357BAC80375394C7AC /* Metal4DevicePipeline.swift */,
 				F87755C72C3B8419FC3499A1 /* MetalView.swift */,
 				2A3FFF8A99FEB04D0E055678 /* Renderer.swift */,
@@ -157,6 +177,7 @@
 		51779F9A13F06668F8B289C4 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				210DBD40019474B795E9951B /* AVFoundation.framework */,
 				73CCEC5D5E9ED976160F2E30 /* Metal.framework */,
 				F80152C5B2E83F03BB62F52C /* MetalKit.framework */,
 				7285CAA3838DC0A4CCE20746 /* QuartzCore.framework */,
@@ -189,6 +210,7 @@
 			isa = PBXGroup;
 			children = (
 				E770B09E14E8BD39357E0D32 /* App */,
+				35BFD0019912AD8EFC76902A /* Audio */,
 				393513A0F28BFE4F5AB245A4 /* Engine */,
 				7BC1D546581468CD030E8BA6 /* Resources */,
 				E875E4F56FA551F67A5B12E5 /* Shaders */,
@@ -211,8 +233,10 @@
 		D63CD364A2B53E5BBCE53EFE /* VoxelRayTests */ = {
 			isa = PBXGroup;
 			children = (
+				C2CE676BC3F227E6C6587C22 /* AudioAndGameplayTests.swift */,
 				C0699F5A64113EE0F642C0FF /* CameraTests.swift */,
 				9A03E994393ED0DD9DA8A8E6 /* DestructionTests.swift */,
+				23A87340451E7151CB27136B /* DevicePerformanceTests.swift */,
 				79C601A8984477F07AD1DC54 /* RendererSmokeTests.swift */,
 				80E671F66F8A9A890103D8BC /* StoreKitTests.swift */,
 				4E0A985471778A302DAA260E /* VoxelWorldTests.swift */,
@@ -379,6 +403,7 @@
 			files = (
 				FF7649C53DE95A657D791394 /* Camera.swift in Sources */,
 				C0BE05538F5DACBA3D8D971F /* ContentView.swift in Sources */,
+				E92DEFD6D1882B31F8F83FB7 /* DebrisSystem.swift in Sources */,
 				442131F63CCEFD56BE20E660 /* HUDView.swift in Sources */,
 				E06612D45D6EFE4BA665086D /* Lighting.metal in Sources */,
 				D0219A20A489E3EB98245B88 /* Metal4DevicePipeline.swift in Sources */,
@@ -388,6 +413,7 @@
 				5C0C2549AA39137BC03423DD /* Renderer.swift in Sources */,
 				C5EA6A6748DDC31319F19CDA /* SimulatorComputePipeline.swift in Sources */,
 				18ACFF12CEBCB4AAB6ABA749 /* SimulatorFallback.metal in Sources */,
+				F2D35D073E663DD0F1D3E1F3 /* SoundEngine.swift in Sources */,
 				923A6FF160A7CC6823273FB5 /* StoreConfig.swift in Sources */,
 				5252DF06942BADAD5D38CAC7 /* StoreManager.swift in Sources */,
 				5EE01FBDF49327B0C5554D31 /* VoxelIntersect.metal in Sources */,
@@ -400,8 +426,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CF982DBBC60CC9C6A0AA9236 /* AudioAndGameplayTests.swift in Sources */,
 				2D26AADFD771020801CA87B3 /* CameraTests.swift in Sources */,
 				82C95FDDC2F677B2397EE85B /* DestructionTests.swift in Sources */,
+				B5F8A15A6B3C9CCC7E3DE7DB /* DevicePerformanceTests.swift in Sources */,
 				C7DBF446027C2C6AB0495C6C /* RendererSmokeTests.swift in Sources */,
 				8A307575EF74B6A09DA0F61A /* StoreKitTests.swift in Sources */,
 				C74750F6DDF7B3EBB84022A3 /* VoxelWorldTests.swift in Sources */,
